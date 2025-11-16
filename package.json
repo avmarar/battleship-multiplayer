@@ -6,6 +6,8 @@
     "dev": "npm-run-all --parallel emulators dev:next",
     "dev:next": "next dev",
     "emulators": "firebase emulators:start --only firestore,auth --project battleship-multiplayer",
+    "test:rules:run": "node tests/firestore/rules.test.js",
+    "test:rules": "npx firebase emulators:exec --project battleship-multiplayer --only firestore \"npm run test:rules:run\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -17,6 +19,7 @@
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

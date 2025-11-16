@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function lobbyPath(lobbyId) {
+      return /databases/$(database)/documents/lobbies/$(lobbyId);
+    }
+
+    function lobbyExists(lobbyId) {
+      return exists(lobbyPath(lobbyId));
+    }
+
+    function lobbyData(lobbyId) {
+      return get(lobbyPath(lobbyId)).data;
+    }
+
+    function isLobbyCaptain(lobbyId) {
+      let isAuth = isAuthenticated();
+      let exists = lobbyExists(lobbyId);
+      let data = exists ? lobbyData(lobbyId) : null;
+      return isAuth && exists && data != null &&
+        data.captainId == request.auth.uid;
+    }
+
+    function allowedLobbyStatuses() {
+      return ['LOBBY', 'PLACEMENT', 'BATTLE', 'ENDED'];
+    }
+
+    function allowedTeams() {
+      return ['ALPHA', 'BETA'];
+    }
+
+    function allowedJoinStatuses() {
+      return ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
+    }
+
+    function isValidInvite(code) {
+      return code is string && code.size() == 6 && code.matches('^[A-Z0-9]+$');
+    }
+
+    function lobbyCreateFieldsValid(data) {
+      return data.keys().hasOnly(['inviteCode', 'captainId', 'status', 'memberIds', 'members', 'createdAt', 'isLocked']) &&
+        isValidInvite(data.inviteCode) &&
+        data.captainId is string && data.captainId.size() > 0 &&
+        data.status is string && data.status in allowedLobbyStatuses() &&
+        data.memberIds is list && data.memberIds.size() > 0 &&
+        data.members is list &&
+        data.createdAt is timestamp &&
+        data.isLocked is bool;
+    }
+
+    function lobbyUpdateFieldsValid(data) {
+      return (data.keys().hasAny(['status']) ? (data.status is string && data.status in allowedLobbyStatuses()) : true) &&
+        (data.keys().hasAny(['isLocked']) ? data.isLocked is bool : true) &&
+        (data.keys().hasAny(['memberIds']) ? data.memberIds is list : true) &&
+        (data.keys().hasAny(['members']) ? data.members is list : true);
+    }
+
+    function lobbyImmutableFieldsUnchanged() {
+      return (request.resource.data.keys().hasAny(['inviteCode']) ? request.resource.data.inviteCode == resource.data.inviteCode : true) &&
+        (request.resource.data.keys().hasAny(['createdAt']) ? request.resource.data.createdAt == resource.data.createdAt : true) &&
+        (request.resource.data.keys().hasAny(['captainId']) ? request.resource.data.captainId == resource.data.captainId : true);
+    }
+
+    function isValidJoinRequestData(lobbyId, requestId, data) {
+      return data.keys().hasOnly(['lobbyId', 'requestedTeam', 'createdAt', 'status', 'nickname']) &&
+        (data.keys().hasAny(['lobbyId']) ? data.lobbyId == lobbyId : true) &&
+        (data.keys().hasAny(['requestedTeam']) ? data.requestedTeam in allowedTeams() : true) &&
+        (data.keys().hasAny(['createdAt']) ? data.createdAt is timestamp : true) &&
+        (data.keys().hasAny(['status']) ? data.status in allowedJoinStatuses() : true) &&
+        (data.keys().hasAny(['nickname']) ? (data.nickname is string && data.nickname.size() > 0) : true) &&
+        requestId is string && requestId.size() > 0;
+    }
+
+    match /lobbies/{lobbyId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.captainId == request.auth.uid &&
+        lobbyCreateFieldsValid(request.resource.data);
+
+      allow update: if isAuthenticated() &&
+        resource.data.captainId == request.auth.uid &&
+        lobbyUpdateFieldsValid(request.resource.data) &&
+        lobbyImmutableFieldsUnchanged();
+
+      allow delete: if isAuthenticated() &&
+        resource.data.captainId == request.auth.uid;
+    }
+
+    match /lobbies/{lobbyId}/joinRequests/{requestId} {
+      allow read: if isLobbyCaptain(lobbyId) ||
+        (isAuthenticated() && request.auth.uid == requestId);
+
+      allow create: if isAuthenticated() &&
+        lobbyExists(lobbyId) &&
+        lobbyData(lobbyId).isLocked == false &&
+        requestId == request.auth.uid &&
+        isValidJoinRequestData(lobbyId, requestId, request.resource.data) &&
+        request.resource.data.status == 'PENDING';
+
+      allow update: if isLobbyCaptain(lobbyId) &&
+        isValidJoinRequestData(lobbyId, requestId, request.resource.data);
+
+      allow delete: if isLobbyCaptain(lobbyId) ||
+        (isAuthenticated() && request.auth.uid == requestId);
+    }
+  }
+}

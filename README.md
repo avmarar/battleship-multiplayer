@@ -51,3 +51,9 @@ Set `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true` in `.env.local` if you want the cl
 
 - Complete CI/CD wiring (end of Sprint 1\).
 - Extend the authenticated PoC into the lobby, placement, and battle sprints documented in `/docs`.
+
+## Git Branching Strategy
+
+- `master`: Release-quality branch only. Promote from `develop` after QA + deployment sign-off.
+- `develop`: Integration branch for upcoming sprint work. All feature branches merge here via PR.
+- `feature/<ticket-or-topic>`: Short-lived branches for individual tasks. Branch from `develop`, submit PR back to `develop`, then delete after merge.

@@ -11,9 +11,9 @@ const sections = [
   {
     title: "Placement",
     description:
-      "Upcoming ship placement sandbox with drag/drop validation and locks.",
+      "Interactive 10×10 sonar grid with local cell selection. Ship drag/lock follows in Sprint 3.",
     href: "/placement",
-    badge: "Stub",
+    badge: "Sprint 2",
   },
   {
     title: "Game",
@@ -44,9 +44,9 @@ export default function Home() {
               Sprint Workbench
             </h1>
             <p className="max-w-3xl text-base text-white/70">
-              Navigate to a dedicated workspace for each core epic. Lobby now
-              hosts the full Sprint&nbsp;2 experience, while Placement, Game,
-              and Scoreboard provide placeholders for upcoming iterations.
+              Navigate to a dedicated workspace for each core epic. Lobby and
+              the placement grid cover Sprint&nbsp;2; Game and Scoreboard stay
+              placeholders for later iterations.
             </p>
           </div>
         </header>

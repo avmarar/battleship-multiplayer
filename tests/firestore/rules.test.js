@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { readFileSync } = require("fs");
 const path = require("path");
 const {
@@ -15,13 +16,17 @@ function lobbyFixture(overrides = {}) {
     inviteCode: "ABC123",
     captainId: "captain-uid",
     status: "LOBBY",
-    memberIds: ["captain-uid", "member-uid"],
-    members: [
-      { userId: "captain-uid", nickname: "Captain", role: "CAPTAIN" },
-      { userId: "member-uid", nickname: "Crew", role: "CREW" },
-    ],
+    memberIds: ["captain-uid"],
+    members: {
+      "captain-uid": {
+        userId: "captain-uid",
+        nickname: "Captain",
+        role: "CAPTAIN",
+      },
+    },
     createdAt: Timestamp.fromDate(new Date("2024-01-01T00:00:00Z")),
     isLocked: false,
+    maxMembers: 4,
     ...overrides,
   };
 }
@@ -29,10 +34,12 @@ function lobbyFixture(overrides = {}) {
 function joinRequestFixture(overrides = {}) {
   return {
     lobbyId: "lobby-alpha",
+    userId: "requester-uid",
     requestedTeam: "ALPHA",
     createdAt: Timestamp.fromDate(new Date("2024-01-01T00:01:00Z")),
     status: "PENDING",
     nickname: "New Player",
+    inviteCode: "INVITE",
     ...overrides,
   };
 }

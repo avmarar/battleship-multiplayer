@@ -42,36 +42,45 @@ service cloud.firestore {
     }
 
     function lobbyCreateFieldsValid(data) {
-      return data.keys().hasOnly(['inviteCode', 'captainId', 'status', 'memberIds', 'members', 'createdAt', 'isLocked']) &&
+      let captainOnlyMemberList = data.memberIds is list &&
+        data.memberIds.size() == 1 &&
+        data.memberIds[0] == data.captainId;
+      return data.keys().hasOnly(['inviteCode', 'captainId', 'status', 'memberIds', 'members', 'createdAt', 'isLocked', 'maxMembers']) &&
         isValidInvite(data.inviteCode) &&
         data.captainId is string && data.captainId.size() > 0 &&
         data.status is string && data.status in allowedLobbyStatuses() &&
-        data.memberIds is list && data.memberIds.size() > 0 &&
-        data.members is list &&
+        captainOnlyMemberList &&
+        data.members is map &&
+        data.members[data.captainId] != null &&
+        data.members[data.captainId].userId == data.captainId &&
         data.createdAt is timestamp &&
-        data.isLocked is bool;
+        data.isLocked is bool &&
+        data.maxMembers is number && data.maxMembers >= 2 && data.maxMembers <= 12;
     }
 
     function lobbyUpdateFieldsValid(data) {
       return (data.keys().hasAny(['status']) ? (data.status is string && data.status in allowedLobbyStatuses()) : true) &&
         (data.keys().hasAny(['isLocked']) ? data.isLocked is bool : true) &&
         (data.keys().hasAny(['memberIds']) ? data.memberIds is list : true) &&
-        (data.keys().hasAny(['members']) ? data.members is list : true);
+        (data.keys().hasAny(['members']) ? data.members is map : true);
     }
 
     function lobbyImmutableFieldsUnchanged() {
       return (request.resource.data.keys().hasAny(['inviteCode']) ? request.resource.data.inviteCode == resource.data.inviteCode : true) &&
         (request.resource.data.keys().hasAny(['createdAt']) ? request.resource.data.createdAt == resource.data.createdAt : true) &&
-        (request.resource.data.keys().hasAny(['captainId']) ? request.resource.data.captainId == resource.data.captainId : true);
+        (request.resource.data.keys().hasAny(['captainId']) ? request.resource.data.captainId == resource.data.captainId : true) &&
+        (request.resource.data.keys().hasAny(['maxMembers']) ? request.resource.data.maxMembers == resource.data.maxMembers : true);
     }
 
     function isValidJoinRequestData(lobbyId, requestId, data) {
-      return data.keys().hasOnly(['lobbyId', 'requestedTeam', 'createdAt', 'status', 'nickname']) &&
+      return data.keys().hasOnly(['lobbyId', 'requestedTeam', 'createdAt', 'status', 'nickname', 'userId', 'decisionAt', 'decisionBy', 'inviteCode']) &&
         (data.keys().hasAny(['lobbyId']) ? data.lobbyId == lobbyId : true) &&
         (data.keys().hasAny(['requestedTeam']) ? data.requestedTeam in allowedTeams() : true) &&
         (data.keys().hasAny(['createdAt']) ? data.createdAt is timestamp : true) &&
         (data.keys().hasAny(['status']) ? data.status in allowedJoinStatuses() : true) &&
         (data.keys().hasAny(['nickname']) ? (data.nickname is string && data.nickname.size() > 0) : true) &&
+        (data.keys().hasAny(['inviteCode']) ? isValidInvite(data.inviteCode) : true) &&
+        (data.keys().hasAny(['userId']) ? data.userId == requestId : true) &&
         requestId is string && requestId.size() > 0;
     }
 
@@ -93,7 +102,10 @@ service cloud.firestore {
 
     match /lobbies/{lobbyId}/joinRequests/{requestId} {
       allow read: if isLobbyCaptain(lobbyId) ||
-        (isAuthenticated() && request.auth.uid == requestId);
+        (isAuthenticated() &&
+          (request.auth.uid == requestId ||
+            (resource.data.userId != null &&
+              resource.data.userId == request.auth.uid)));
 
       allow create: if isAuthenticated() &&
         lobbyExists(lobbyId) &&
@@ -107,6 +119,10 @@ service cloud.firestore {
 
       allow delete: if isLobbyCaptain(lobbyId) ||
         (isAuthenticated() && request.auth.uid == requestId);
+    }
+
+    match /{rootCollection}/{namespace}/users/{userId}/data/{docId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
   }
 }

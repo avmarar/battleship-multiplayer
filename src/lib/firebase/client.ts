@@ -44,6 +44,13 @@ export function getFirestoreDb(): Firestore | null {
   }
 
   cachedDb = getFirestore(app);
+  if (useEmulators && typeof window !== "undefined") {
+    import("firebase/firestore").then(({ connectFirestoreEmulator }) => {
+      if (cachedDb) {
+        connectFirestoreEmulator(cachedDb, "localhost", 8080);
+      }
+    });
+  }
 
   return cachedDb;
 }
@@ -73,11 +80,6 @@ export function getFirebaseAuth(): Auth | null {
       }
     });
 
-    import("firebase/firestore").then(({ connectFirestoreEmulator }) => {
-      if (cachedDb) {
-        connectFirestoreEmulator(cachedDb, "localhost", 8080);
-      }
-    });
   }
 
   return cachedAuth;

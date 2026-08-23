@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ToastProvider } from "@/components/feedback/ToastProvider";
 import { SiteNav } from "@/components/layout/SiteNav";
 import "./globals.css";
 
@@ -30,8 +31,10 @@ export default function RootLayout({
         <a href="#content" className="skip-link">
           Skip to content
         </a>
-        <SiteNav />
-        <div id="content">{children}</div>
+        <ToastProvider>
+          <SiteNav />
+          <div id="content">{children}</div>
+        </ToastProvider>
       </body>
     </html>
   );

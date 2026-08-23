@@ -68,6 +68,7 @@ async function run() {
     await shouldBindJoinRequestsToTeamInviteCodes(testEnv);
     await shouldEnforceDualTeamCaptainApprovals(testEnv);
     await shouldProtectMatchmakingAndPlacement(testEnv);
+    await shouldBlockCrewPlacementLock(testEnv);
     await shouldEnforceMatchLobbyRules(testEnv);
     await shouldEnforceLeaderboardAndPresence(testEnv);
     console.log("Firestore security rules tests passed");
@@ -533,6 +534,50 @@ async function shouldProtectMatchmakingAndPlacement(testEnv) {
       uid: null,
       nickname: null,
       updatedAt: Timestamp.now(),
+    })
+  );
+}
+
+async function shouldBlockCrewPlacementLock(testEnv) {
+  await testEnv.clearFirestore();
+  await seedGame(
+    testEnv,
+    "game-crew",
+    gameFixture({
+      memberIds: ["alpha-uid", "crew-uid", "beta-uid"],
+      teams: {
+        ALPHA: { captainId: "alpha-uid", memberIds: ["alpha-uid", "crew-uid"] },
+        BETA: { captainId: "beta-uid", memberIds: ["beta-uid"] },
+      },
+    }),
+    teamFixture("ALPHA", "alpha-uid", { memberIds: ["alpha-uid", "crew-uid"] }),
+    teamFixture("BETA", "beta-uid")
+  );
+
+  const crew = testEnv.authenticatedContext("crew-uid");
+
+  await assertSucceeds(
+    crew.firestore().doc("games/game-crew/teams/ALPHA").update({
+      ships: [
+        {
+          type: "DESTROYER",
+          size: 2,
+          hits: 0,
+          coordinates: ["A1", "A2"],
+        },
+      ],
+    })
+  );
+
+  await assertFails(
+    crew.firestore().doc("games/game-crew/teams/ALPHA").update({
+      isLocked: true,
+    })
+  );
+
+  await assertFails(
+    crew.firestore().doc("games/game-crew").update({
+      "placement.ALPHA.isLocked": true,
     })
   );
 }

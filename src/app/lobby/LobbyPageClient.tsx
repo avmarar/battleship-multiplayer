@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  onAuthStateChanged,
-  updateProfile,
-} from "firebase/auth";
+import { updateProfile } from "firebase/auth";
 import {
   collection,
   deleteDoc,
@@ -20,13 +17,15 @@ import {
   where,
 } from "firebase/firestore";
 import {
-  ensureAnonymousSignIn,
   getFirebaseAuth,
   getFirestoreDb,
   isFirebaseReady,
 } from "@/lib/firebase/client";
+import { subscribeToAnonymousAuth } from "@/lib/firebase/useAnonymousAuth";
 import { startMatchGame } from "@/lib/games/startMatchGame";
+import { isEmailAccount } from "@/lib/firebase/account";
 import { upsertLeaderboardNickname } from "@/lib/leaderboard/upsertNickname";
+import { useToast } from "@/components/feedback/ToastProvider";
 import { handoverMatchCaptain, electLongestTenured } from "@/lib/matches/handover";
 import { canHandoverCaptain } from "@/lib/presence/stale";
 import { usePresence } from "@/lib/presence/usePresence";
@@ -103,6 +102,7 @@ function writePendingJoinPath(path: string | null) {
 export function LobbyPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { confirmAction, pushToast } = useToast();
   const firebaseAvailable = isFirebaseReady();
   const firebaseAuth = firebaseAvailable ? getFirebaseAuth() : null;
   const firestoreDb = firebaseAvailable ? getFirestoreDb() : null;
@@ -162,31 +162,17 @@ export function LobbyPageClient() {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(
-      firebaseAuth,
-      (user) => {
-        if (user) {
-          setAuthState({ status: "connected", uid: user.uid });
-        } else {
-          setAuthState({ status: "checking" });
-        }
-      },
-      (error) => {
-        setAuthState({ status: "error", message: error.message });
+    return subscribeToAnonymousAuth(firebaseAuth, (state) => {
+      if (state.status === "connected") {
+        setAuthState({ status: "connected", uid: state.uid });
+        return;
       }
-    );
-
-    if (!firebaseAuth.currentUser) {
-      ensureAnonymousSignIn(firebaseAuth).catch((error) =>
-        setAuthState({
-          status: "error",
-          message:
-            error instanceof Error ? error.message : "Anonymous sign-in failed.",
-        })
-      );
-    }
-
-    return () => unsubscribe();
+      if (state.status === "error") {
+        setAuthState(state);
+        return;
+      }
+      setAuthState({ status: "checking" });
+    });
   }, [firebaseAuth]);
 
   const connectedUid = authState.status === "connected" ? authState.uid : null;
@@ -802,10 +788,11 @@ export function LobbyPageClient() {
       return;
     }
 
-    const confirmed =
-      typeof window === "undefined"
-        ? true
-        : window.confirm("Disband this match? This action cannot be undone.");
+    const confirmed = await confirmAction({
+      title: "Disband this match?",
+      message: "This action cannot be undone.",
+      confirmLabel: "Disband",
+    });
 
     if (!confirmed) {
       return;
@@ -834,10 +821,12 @@ export function LobbyPageClient() {
       ]);
       await deleteDoc(doc(firestoreDb, MATCHES_COLLECTION, activeMatch.id));
       setLobbyActionMessage("Match disbanded.");
+      pushToast("Match disbanded.", "success");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to disband the match.";
       setLobbyActionError(message);
+      pushToast(message, "error");
     }
   };
 
@@ -903,6 +892,8 @@ export function LobbyPageClient() {
         "profile"
       );
 
+      const authInstance = getFirebaseAuth();
+
       await setDoc(
         profileDocRef,
         {
@@ -910,12 +901,13 @@ export function LobbyPageClient() {
           statusMessage: trimmedStatus || defaultStatusMessage,
           environment: process.env.NODE_ENV,
           lastClientUpdate: new Date().toISOString(),
+          accountType: isEmailAccount(authInstance?.currentUser ?? null)
+            ? "registered"
+            : "guest",
           updatedAt: serverTimestamp(),
         },
         { merge: true }
       );
-
-      const authInstance = getFirebaseAuth();
       if (authInstance?.currentUser) {
         await updateProfile(authInstance.currentUser, {
           displayName: trimmedNickname,

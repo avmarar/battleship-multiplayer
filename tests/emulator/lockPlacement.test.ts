@@ -46,8 +46,8 @@ describe("placement lock transactions (QA-3.2)", () => {
     const beta = testEnv.authenticatedContext("beta-uid").firestore();
 
     await Promise.all([
-      lockPlacement(alpha, GAME_ID, "ALPHA", fleet),
-      lockPlacement(beta, GAME_ID, "BETA", fleet),
+      lockPlacement(alpha, GAME_ID, "ALPHA", fleet, "alpha-uid"),
+      lockPlacement(beta, GAME_ID, "BETA", fleet, "beta-uid"),
     ]);
 
     const game = await readGame(testEnv);
@@ -66,23 +66,50 @@ describe("placement lock transactions (QA-3.2)", () => {
     const fleet = completeHorizontalFleet();
     const alpha = testEnv.authenticatedContext("alpha-uid").firestore();
 
-    await lockPlacement(alpha, GAME_ID, "ALPHA", fleet);
+    await lockPlacement(alpha, GAME_ID, "ALPHA", fleet, "alpha-uid");
     await expect(
-      lockPlacement(alpha, GAME_ID, "ALPHA", fleet)
+      lockPlacement(alpha, GAME_ID, "ALPHA", fleet, "alpha-uid")
     ).rejects.toThrow(/already locked/i);
+  });
+
+  it("rejects a crew member who is not the team captain", async () => {
+    await seedUnlockedGame(testEnv, {
+      memberIds: ["alpha-uid", "crew-uid", "beta-uid"],
+      teams: {
+        ALPHA: { captainId: "alpha-uid", memberIds: ["alpha-uid", "crew-uid"] },
+        BETA: { captainId: "beta-uid", memberIds: ["beta-uid"] },
+      },
+    });
+    const fleet = completeHorizontalFleet();
+    const crew = testEnv.authenticatedContext("crew-uid").firestore();
+
+    await expect(
+      lockPlacement(crew, GAME_ID, "ALPHA", fleet, "crew-uid")
+    ).rejects.toThrow(/only the team captain/i);
   });
 });
 
-async function seedUnlockedGame(testEnv: RulesTestEnvironment) {
+async function seedUnlockedGame(
+  testEnv: RulesTestEnvironment,
+  overrides: {
+    memberIds?: string[];
+    teams?: {
+      ALPHA: { captainId: string; memberIds: string[] };
+      BETA: { captainId: string; memberIds: string[] };
+    };
+  } = {}
+) {
+  const memberIds = overrides.memberIds ?? ["alpha-uid", "beta-uid"];
+  const teams = overrides.teams ?? {
+    ALPHA: { captainId: "alpha-uid", memberIds: ["alpha-uid"] },
+    BETA: { captainId: "beta-uid", memberIds: ["beta-uid"] },
+  };
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const firestore = context.firestore();
     await firestore.doc(`games/${GAME_ID}`).set({
       status: "PLACEMENT",
-      memberIds: ["alpha-uid", "beta-uid"],
-      teams: {
-        ALPHA: { captainId: "alpha-uid", memberIds: ["alpha-uid"] },
-        BETA: { captainId: "beta-uid", memberIds: ["beta-uid"] },
-      },
+      memberIds,
+      teams,
       placement: {
         ALPHA: { isLocked: false },
         BETA: { isLocked: false },
@@ -91,14 +118,14 @@ async function seedUnlockedGame(testEnv: RulesTestEnvironment) {
     });
     await firestore.doc(`games/${GAME_ID}/teams/ALPHA`).set({
       teamId: "ALPHA",
-      memberIds: ["alpha-uid"],
+      memberIds: teams.ALPHA.memberIds,
       ships: [],
       isLocked: false,
       shotsFired: [],
     });
     await firestore.doc(`games/${GAME_ID}/teams/BETA`).set({
       teamId: "BETA",
-      memberIds: ["beta-uid"],
+      memberIds: teams.BETA.memberIds,
       ships: [],
       isLocked: false,
       shotsFired: [],

@@ -245,6 +245,7 @@ service cloud.firestore {
       let team = gamePlayerTeam();
       let other = team == 'ALPHA' ? 'BETA' : 'ALPHA';
       return team != '' &&
+        request.auth.uid == resource.data.teams[team].captainId &&
         resource.data.status == 'PLACEMENT' &&
         request.resource.data.status == 'PLACEMENT' &&
         request.resource.data.memberIds == resource.data.memberIds &&
@@ -259,6 +260,7 @@ service cloud.firestore {
       let team = gamePlayerTeam();
       let other = team == 'ALPHA' ? 'BETA' : 'ALPHA';
       return team != '' &&
+        request.auth.uid == resource.data.teams[team].captainId &&
         resource.data.status == 'PLACEMENT' &&
         request.resource.data.status == 'BATTLE' &&
         resource.data.placement[other].isLocked == true &&
@@ -759,6 +761,11 @@ service cloud.firestore {
         return isParentMember() && request.auth.uid in parentGame().teams[teamId].memberIds;
       }
 
+      function isGameTeamCaptain() {
+        return isTeamMember() &&
+          request.auth.uid == parentGame().teams[teamId].captainId;
+      }
+
       allow read: if isTeamMember() ||
         (isParentMember() && parentGame().status in ['BATTLE', 'ENDED']);
 
@@ -770,9 +777,16 @@ service cloud.firestore {
 
       allow update: if (isTeamMember() &&
         resource.data.isLocked == false &&
+        request.resource.data.isLocked == false &&
         request.resource.data.teamId == resource.data.teamId &&
         request.resource.data.memberIds == resource.data.memberIds &&
         request.resource.data.shotsFired == resource.data.shotsFired) ||
+        (isGameTeamCaptain() &&
+          resource.data.isLocked == false &&
+          request.resource.data.isLocked == true &&
+          request.resource.data.teamId == resource.data.teamId &&
+          request.resource.data.memberIds == resource.data.memberIds &&
+          request.resource.data.shotsFired == resource.data.shotsFired) ||
         (isParentMember() &&
           parentGame().status in ['BATTLE', 'ENDED'] &&
           request.resource.data.teamId == resource.data.teamId &&

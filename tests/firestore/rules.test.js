@@ -66,8 +66,10 @@ async function run() {
     await shouldBlockJoinRequestsWhenLocked(testEnv);
     await shouldAllowMembersToToggleOwnReady(testEnv);
     await shouldBindJoinRequestsToTeamInviteCodes(testEnv);
-  await shouldProtectMatchmakingAndPlacement(testEnv);
-  console.log("Firestore security rules tests passed");
+    await shouldEnforceDualTeamCaptainApprovals(testEnv);
+    await shouldProtectMatchmakingAndPlacement(testEnv);
+    await shouldEnforceMatchLobbyRules(testEnv);
+    console.log("Firestore security rules tests passed");
   } finally {
     await testEnv.cleanup();
   }
@@ -173,7 +175,9 @@ async function shouldEnforceJoinRequestOwnershipRules(testEnv) {
       .get()
   );
 
-  await assertSucceeds(
+  // Owners listen to a concrete request path; collection-group list by userId
+  // is intentionally denied (avoids legacy docs without userId breaking eval).
+  await assertFails(
     requester
       .firestore()
       .collectionGroup("joinRequests")
@@ -273,6 +277,99 @@ async function shouldBindJoinRequestsToTeamInviteCodes(testEnv) {
           inviteCode: "BETA99",
         })
       )
+  );
+}
+
+async function shouldEnforceDualTeamCaptainApprovals(testEnv) {
+  await testEnv.clearFirestore();
+  await seedLobby(testEnv, "lobby-alpha", lobbyFixture());
+
+  const alphaCaptain = testEnv.authenticatedContext("captain-uid");
+  const betaCaptain = testEnv.authenticatedContext("beta-cap");
+  const outsider = testEnv.authenticatedContext("outsider-uid");
+
+  await assertSucceeds(
+    betaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/beta-cap")
+      .set(
+        joinRequestFixture({
+          userId: "beta-cap",
+          requestedTeam: "BETA",
+          inviteCode: "BETA99",
+          nickname: "Beta Cap",
+        })
+      )
+  );
+
+  // Alpha may seat the first Beta captain while captainIdBeta is still unset.
+  await assertSucceeds(
+    alphaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/beta-cap")
+      .update({ status: "APPROVED" })
+  );
+  await assertSucceeds(
+    alphaCaptain.firestore().doc("lobbies/lobby-alpha").update({
+      memberIds: ["captain-uid", "beta-cap"],
+      captainIdBeta: "beta-cap",
+      "members.beta-cap": {
+        userId: "beta-cap",
+        nickname: "Beta Cap",
+        role: "CAPTAIN",
+        team: "BETA",
+        isReady: false,
+      },
+    })
+  );
+
+  await assertSucceeds(
+    outsider
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/outsider-uid")
+      .set(
+        joinRequestFixture({
+          userId: "outsider-uid",
+          requestedTeam: "BETA",
+          inviteCode: "BETA99",
+          nickname: "Beta Crew",
+        })
+      )
+  );
+
+  // After Beta captain exists, Alpha cannot decide Beta join requests.
+  await assertFails(
+    alphaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/outsider-uid")
+      .update({ status: "APPROVED" })
+  );
+
+  await assertSucceeds(
+    betaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/outsider-uid")
+      .update({ status: "APPROVED" })
+  );
+
+  await assertSucceeds(
+    betaCaptain.firestore().doc("lobbies/lobby-alpha").update({
+      memberIds: ["captain-uid", "beta-cap", "outsider-uid"],
+      "members.outsider-uid": {
+        userId: "outsider-uid",
+        nickname: "Beta Crew",
+        role: "CREW",
+        team: "BETA",
+        isReady: false,
+      },
+    })
+  );
+
+  // Beta captain cannot change lobby lock/status.
+  await assertFails(
+    betaCaptain.firestore().doc("lobbies/lobby-alpha").update({
+      isLocked: true,
+    })
   );
 }
 
@@ -435,6 +532,125 @@ async function shouldProtectMatchmakingAndPlacement(testEnv) {
       uid: null,
       nickname: null,
       updatedAt: Timestamp.now(),
+    })
+  );
+}
+
+function matchFixture(overrides = {}) {
+  return {
+    mode: "1v1",
+    matchCode: "MATCH1",
+    captainIdAlpha: "alpha-uid",
+    status: "LOBBY",
+    memberIds: ["alpha-uid"],
+    maxMembersPerTeam: 1,
+    createdAt: Timestamp.fromDate(new Date("2024-01-01T00:00:00Z")),
+    ...overrides,
+  };
+}
+
+function matchTeamFixture(teamId, overrides = {}) {
+  const captainId = overrides.captainId ?? (teamId === "ALPHA" ? "alpha-uid" : "");
+  const memberIds =
+    overrides.memberIds ?? (captainId ? [captainId] : []);
+  return {
+    teamId,
+    captainId,
+    memberIds,
+    members:
+      overrides.members ??
+      (captainId
+        ? {
+            [captainId]: {
+              userId: captainId,
+              nickname: teamId,
+              role: "CAPTAIN",
+              isReady: false,
+            },
+          }
+        : {}),
+    isLocked: false,
+    ...overrides,
+  };
+}
+
+async function seedMatch(testEnv, matchId, matchData, alpha, beta) {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
+    await firestore.doc(`matches/${matchId}`).set(matchData);
+    await firestore.doc(`matches/${matchId}/matchTeams/ALPHA`).set(alpha);
+    await firestore.doc(`matches/${matchId}/matchTeams/BETA`).set(beta);
+  });
+}
+
+async function shouldEnforceMatchLobbyRules(testEnv) {
+  await testEnv.clearFirestore();
+  await seedMatch(
+    testEnv,
+    "match-1",
+    matchFixture(),
+    matchTeamFixture("ALPHA"),
+    matchTeamFixture("BETA")
+  );
+
+  const alpha = testEnv.authenticatedContext("alpha-uid");
+  const beta = testEnv.authenticatedContext("beta-uid");
+  const outsider = testEnv.authenticatedContext("outsider-uid");
+  const unauth = testEnv.unauthenticatedContext();
+
+  await assertFails(unauth.firestore().doc("matches/match-1").get());
+  await assertSucceeds(alpha.firestore().doc("matches/match-1").get());
+
+  await assertSucceeds(
+    beta.firestore().doc("matches/match-1").update({
+      captainIdBeta: "beta-uid",
+      memberIds: ["alpha-uid", "beta-uid"],
+    })
+  );
+
+  await assertSucceeds(
+    beta.firestore().doc("matches/match-1/matchTeams/BETA").set(
+      {
+        teamId: "BETA",
+        captainId: "beta-uid",
+        memberIds: ["beta-uid"],
+        members: {
+          "beta-uid": {
+            userId: "beta-uid",
+            nickname: "Beta",
+            role: "CAPTAIN",
+            isReady: false,
+          },
+        },
+        isLocked: false,
+      },
+      { merge: true }
+    )
+  );
+
+  await assertFails(
+    outsider.firestore().doc("matches/match-1").update({
+      captainIdBeta: "outsider-uid",
+      memberIds: ["alpha-uid", "outsider-uid"],
+    })
+  );
+
+  await assertSucceeds(
+    beta.firestore().doc("matches/match-1/matchTeams/BETA").update({
+      "members.beta-uid.isReady": true,
+    })
+  );
+
+  await assertFails(
+    outsider.firestore().doc("matches/match-1/matchTeams/BETA").update({
+      "members.beta-uid.isReady": false,
+    })
+  );
+
+  await assertSucceeds(
+    alpha.firestore().doc("matches/match-1").update({
+      status: "PLACEMENT",
+      gameId: "game-from-match",
     })
   );
 }

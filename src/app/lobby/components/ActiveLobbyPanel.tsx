@@ -1,108 +1,135 @@
 import {
-  allMembersReady,
-  countReadyMembers,
+  bothCaptainsSeated,
+  canStartMatch,
   isMemberReady,
-} from "@/lib/lobbies/ready";
-import type { LobbyMember, LobbyTeamId } from "@/lib/lobbies/types";
-import type { JoinRequestWithPath, LobbySnapshot } from "../types";
+} from "@/lib/matches/ready";
+import type { MatchMember, MatchTeamId } from "@/lib/matches/types";
+import type {
+  JoinRequestWithPath,
+  MatchSnapshot,
+  MatchTeamSnapshot,
+} from "../types";
 
 type ActiveLobbyPanelProps = {
-  activeLobby: LobbySnapshot | null;
+  activeMatch: MatchSnapshot | null;
+  alphaTeam: MatchTeamSnapshot | null;
+  betaTeam: MatchTeamSnapshot | null;
   connectedUid: string | null;
-  lobbyMembers: LobbyMember[];
-  isLobbyCaptain: boolean;
+  myTeamId: MatchTeamId | null;
+  isAlphaCaptain: boolean;
+  isTeamCaptain: boolean;
   captainJoinRequests: JoinRequestWithPath[];
   lobbyActionMessage: string | null;
   lobbyActionError: string | null;
-  onCopyInviteCode: (team: LobbyTeamId) => void;
+  onCopyMatchCode: () => void;
+  onCopyCrewInvite: () => void;
   onApproveJoinRequest: (request: JoinRequestWithPath) => void;
   onRejectJoinRequest: (request: JoinRequestWithPath) => void;
   onToggleReady: () => void;
   onStartPlacement: () => void;
-  onToggleLobbyLock: () => void;
-  onDisbandLobby: () => void;
+  onToggleTeamLock: () => void;
+  onDisbandMatch: () => void;
 };
 
+function teamMembers(team: MatchTeamSnapshot | null): MatchMember[] {
+  if (!team?.members) {
+    return [];
+  }
+  return Object.values(team.members);
+}
+
 export function ActiveLobbyPanel({
-  activeLobby,
+  activeMatch,
+  alphaTeam,
+  betaTeam,
   connectedUid,
-  lobbyMembers,
-  isLobbyCaptain,
+  myTeamId,
+  isAlphaCaptain,
+  isTeamCaptain,
   captainJoinRequests,
   lobbyActionError,
   lobbyActionMessage,
-  onCopyInviteCode,
+  onCopyMatchCode,
+  onCopyCrewInvite,
   onApproveJoinRequest,
   onRejectJoinRequest,
   onToggleReady,
   onStartPlacement,
-  onToggleLobbyLock,
-  onDisbandLobby,
+  onToggleTeamLock,
+  onDisbandMatch,
 }: ActiveLobbyPanelProps) {
-  const readyTotals = countReadyMembers(lobbyMembers);
-  const canAdvanceToPlacement =
-    isLobbyCaptain &&
-    activeLobby?.status === "LOBBY" &&
-    allMembersReady(lobbyMembers);
-  const canToggleReady = activeLobby?.status === "LOBBY" && !!connectedUid;
-  const selfIsReady = lobbyMembers.some(
+  const myTeam =
+    myTeamId === "ALPHA" ? alphaTeam : myTeamId === "BETA" ? betaTeam : null;
+  const allMembers = [...teamMembers(alphaTeam), ...teamMembers(betaTeam)];
+  const readyCount = allMembers.filter(isMemberReady).length;
+  const canAdvance =
+    !!activeMatch &&
+    isAlphaCaptain &&
+    canStartMatch(activeMatch, alphaTeam, betaTeam);
+  const canToggleReady = activeMatch?.status === "LOBBY" && !!myTeam && !!connectedUid;
+  const selfIsReady = allMembers.some(
     (member) => member.userId === connectedUid && isMemberReady(member)
   );
+  const awaitingBetaCaptain =
+    !!activeMatch && !bothCaptainsSeated(activeMatch);
+  const showCrewInvite =
+    activeMatch?.mode === "MULTIPLAYER" && isTeamCaptain && !!myTeam?.inviteCode;
 
   return (
     <div className="space-y-5 rounded-3xl border border-white/5 bg-[#050b1a]/80 p-6 shadow-xl shadow-black/30">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
-            Active Lobby
-          </p>
-          <h2 className="text-2xl font-semibold text-white">
-            {activeLobby ? "Share a team invite" : "No lobby joined"}
-          </h2>
-        </div>
+      <div>
+        <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
+          Active Match
+        </p>
+        <h2 className="text-2xl font-semibold text-white">
+          {activeMatch ? "Lobby ready" : "No match joined"}
+        </h2>
       </div>
-      {activeLobby ? (
+      {activeMatch ? (
         <>
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/4 px-4 py-3">
               <div className="text-sm text-white/70">
                 <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">
-                  Alpha invite
+                  Match code
                 </p>
                 <p
                   className="font-mono text-lg font-semibold text-white"
-                  data-testid="invite-code"
+                  data-testid="match-code"
                 >
-                  {activeLobby.inviteCode}
+                  {activeMatch.matchCode}
+                </p>
+                <p className="text-xs text-white/50">
+                  Share with the opposing captain
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => onCopyInviteCode("ALPHA")}
+                onClick={onCopyMatchCode}
                 className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40"
               >
-                Copy Alpha
+                Copy
               </button>
             </div>
-            {activeLobby.inviteCodeBeta && (
+            {showCrewInvite && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/4 px-4 py-3">
                 <div className="text-sm text-white/70">
                   <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">
-                    Beta invite
+                    Your crew invite ({myTeamId})
                   </p>
                   <p
                     className="font-mono text-lg font-semibold text-white"
-                    data-testid="invite-code-beta"
+                    data-testid="crew-invite-code"
                   >
-                    {activeLobby.inviteCodeBeta}
+                    {myTeam?.inviteCode}
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => onCopyInviteCode("BETA")}
+                  onClick={onCopyCrewInvite}
                   className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40"
                 >
-                  Copy Beta
+                  Copy
                 </button>
               </div>
             )}
@@ -110,78 +137,90 @@ export function ActiveLobbyPanel({
           <div className="flex flex-wrap gap-3 text-sm text-white/70">
             <span
               className="rounded-full border border-white/10 px-3 py-1"
+              data-testid="match-mode"
+            >
+              {activeMatch.mode}
+            </span>
+            <span
+              className="rounded-full border border-white/10 px-3 py-1"
               data-testid="lobby-member-count"
             >
-              Members {activeLobby.memberIds.length}/{activeLobby.maxMembers}
-            </span>
-            <span className="rounded-full border border-white/10 px-3 py-1">
-              {activeLobby.isLocked ? "Locked" : "Open"}
+              Members {activeMatch.memberIds.length}
             </span>
             <span
               className="rounded-full border border-white/10 px-3 py-1"
               data-testid="ready-count"
             >
-              Ready {readyTotals.ready}/{readyTotals.total}
+              Ready {readyCount}/{allMembers.length}
             </span>
             <span
               className="rounded-full border border-white/10 px-3 py-1"
               data-testid="lobby-status"
             >
-              {activeLobby.status}
+              {activeMatch.status}
+            </span>
+            <span
+              className="rounded-full border border-white/10 px-3 py-1"
+              data-testid="captain-status"
+            >
+              {awaitingBetaCaptain
+                ? "Awaiting Beta captain"
+                : "Alpha + Beta captains"}
             </span>
           </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
-              Members
-            </p>
-            <div className="mt-3 space-y-2">
-              {lobbyMembers.map((member) => (
-                <div
-                  key={member.userId}
-                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/80"
-                >
-                  <div>
-                    <p className="font-semibold text-white">
-                      {member.nickname || "Crew Member"}
+          {(["ALPHA", "BETA"] as const).map((teamId) => {
+            const team = teamId === "ALPHA" ? alphaTeam : betaTeam;
+            const members = teamMembers(team);
+            return (
+              <div key={teamId}>
+                <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
+                  {teamId}
+                  {team?.isLocked ? " · Locked" : ""}
+                  {!team?.captainId ? " · Open seat" : ""}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {members.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-white/10 bg-white/2 px-4 py-3 text-sm text-white/60">
+                      Waiting for players…
                     </p>
-                    <p className="text-xs text-white/60">
-                      {member.role === "CAPTAIN" ? "Captain" : "Crew"}
-                      {member.team ? ` · ${member.team}` : ""}
-                      {member.userId === connectedUid ? " · You" : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide ${
-                        isMemberReady(member)
-                          ? "border border-emerald-400/50 text-emerald-200"
-                          : "border border-white/20 text-white/70"
-                      }`}
-                      data-testid={`member-ready-${member.userId}`}
-                    >
-                      {isMemberReady(member) ? "Ready" : "Not Ready"}
-                    </span>
-                    {member.team && (
-                      <span
-                        className="rounded-full border border-cyan-400/40 px-3 py-1 text-xs uppercase tracking-wide text-cyan-100"
-                        data-testid={`member-team-${member.userId}`}
+                  ) : (
+                    members.map((member) => (
+                      <div
+                        key={member.userId}
+                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/80"
                       >
-                        {member.team}
-                      </span>
-                    )}
-                    <span className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-wide text-white/70">
-                      {member.role}
-                    </span>
-                  </div>
+                        <div>
+                          <p className="font-semibold text-white">
+                            {member.nickname || "Crew Member"}
+                          </p>
+                          <p className="text-xs text-white/60">
+                            {member.role === "CAPTAIN" ? "Captain" : "Crew"}
+                            {` · ${teamId}`}
+                            {member.userId === connectedUid ? " · You" : ""}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide ${
+                            isMemberReady(member)
+                              ? "border border-emerald-400/50 text-emerald-200"
+                              : "border border-white/20 text-white/70"
+                          }`}
+                          data-testid={`member-ready-${member.userId}`}
+                        >
+                          {isMemberReady(member) ? "Ready" : "Not Ready"}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
-          {isLobbyCaptain ? (
+              </div>
+            );
+          })}
+          {isTeamCaptain && activeMatch.mode === "MULTIPLAYER" ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
-                  Join Requests
+                  Crew Join Requests
                 </p>
                 <span className="text-xs text-white/60">
                   {captainJoinRequests.length} open
@@ -189,7 +228,7 @@ export function ActiveLobbyPanel({
               </div>
               {captainJoinRequests.length === 0 ? (
                 <p className="rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/70">
-                  No pending requests yet.
+                  No pending crew requests yet.
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -204,7 +243,7 @@ export function ActiveLobbyPanel({
                             {request.nickname}
                           </p>
                           <p className="text-xs text-white/60">
-                            Team {request.requestedTeam} · {request.status}
+                            Team {request.teamId} · {request.status}
                           </p>
                         </div>
                         {request.status === "PENDING" ? (
@@ -235,66 +274,60 @@ export function ActiveLobbyPanel({
                   ))}
                 </div>
               )}
-              <div className="flex flex-wrap gap-3">
-                {canToggleReady && (
-                  <button
-                    type="button"
-                    data-testid="toggle-ready"
-                    onClick={onToggleReady}
-                    className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
-                  >
-                    {selfIsReady ? "Set Not Ready" : "Set Ready"}
-                  </button>
-                )}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            {canToggleReady && (
+              <button
+                type="button"
+                data-testid="toggle-ready"
+                onClick={onToggleReady}
+                className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
+              >
+                {selfIsReady ? "Set Not Ready" : "Set Ready"}
+              </button>
+            )}
+            {isTeamCaptain && activeMatch.mode === "MULTIPLAYER" && (
+              <button
+                type="button"
+                onClick={onToggleTeamLock}
+                className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
+              >
+                {myTeam?.isLocked ? "Unlock Team" : "Lock Team"}
+              </button>
+            )}
+            {isAlphaCaptain && (
+              <>
                 <button
                   type="button"
                   data-testid="start-placement"
                   onClick={onStartPlacement}
-                  disabled={!canAdvanceToPlacement}
+                  disabled={!canAdvance}
                   className="rounded-full bg-linear-to-r from-cyan-400 to-emerald-400 px-5 py-2 text-sm font-semibold text-[#04101b] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Start Placement
                 </button>
                 <button
                   type="button"
-                  onClick={onToggleLobbyLock}
-                  className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
-                >
-                  {activeLobby.isLocked ? "Unlock Lobby" : "Lock Lobby"}
-                </button>
-                <button
-                  type="button"
-                  onClick={onDisbandLobby}
+                  onClick={onDisbandMatch}
                   className="rounded-full bg-red-500/80 px-5 py-2 text-sm font-semibold text-white hover:bg-red-400/90"
                 >
-                  Disband Lobby
+                  Disband Match
                 </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/80">
-                {activeLobby.status === "PLACEMENT"
-                  ? "The captain started placement. Ready states are locked."
-                  : "Mark ready when your squad is set. The captain can start placement once everyone is ready."}
-              </p>
-              {canToggleReady && (
-                <button
-                  type="button"
-                  data-testid="toggle-ready"
-                  onClick={onToggleReady}
-                  className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
-                >
-                  {selfIsReady ? "Set Not Ready" : "Set Ready"}
-                </button>
-              )}
-            </div>
+              </>
+            )}
+          </div>
+          {!isAlphaCaptain && activeMatch.status === "LOBBY" && (
+            <p className="rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/80">
+              {awaitingBetaCaptain
+                ? "Waiting for the opposing captain via the match code."
+                : "Mark ready when set. Only the Alpha host can start placement."}
+            </p>
           )}
         </>
       ) : (
         <div className="rounded-2xl border border-dashed border-white/10 bg-white/2 p-4 text-sm text-white/70">
-          Create a lobby or join one by invite code to see real-time roster
-          updates here.
+          Create a match or join with a code to see the roster here.
         </div>
       )}
       {lobbyActionMessage && (

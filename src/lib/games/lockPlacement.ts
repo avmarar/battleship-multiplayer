@@ -4,9 +4,12 @@ import {
   toLockedPayload,
   type PlacedShip,
 } from "@/lib/grid/placement";
+import { buildTurnOrder } from "./combat";
+import { opponentTeam } from "./matchmaking";
 import {
   GAMES_COLLECTION,
   GAME_TEAMS_COLLECTION,
+  type GameDocument,
   type GameTeamId,
 } from "./types";
 
@@ -32,17 +35,45 @@ export async function lockPlacement(
       throw new Error("Match no longer exists.");
     }
 
-    const game = gameSnapshot.data();
+    const game = gameSnapshot.data() as GameDocument;
+    if (game.status !== "PLACEMENT") {
+      throw new Error("Placement is closed.");
+    }
     if (game.placement?.[teamId]?.isLocked || teamSnapshot.data()?.isLocked) {
       throw new Error("Placement is already locked.");
     }
+
+    const other = opponentTeam(teamId);
+    const otherLocked = game.placement?.[other]?.isLocked === true;
 
     transaction.update(teamRef, {
       ships: payload,
       isLocked: true,
     });
-    transaction.update(gameRef, {
-      [`placement.${teamId}.isLocked`]: true,
-    });
+
+    if (otherLocked) {
+      const turnOrder = buildTurnOrder({
+        ...game,
+        placement: {
+          ALPHA: {
+            isLocked:
+              teamId === "ALPHA" ? true : game.placement.ALPHA.isLocked,
+          },
+          BETA: {
+            isLocked: teamId === "BETA" ? true : game.placement.BETA.isLocked,
+          },
+        },
+      });
+      transaction.update(gameRef, {
+        [`placement.${teamId}.isLocked`]: true,
+        status: "BATTLE",
+        turnOrder,
+        currentTurnIndex: 0,
+      });
+    } else {
+      transaction.update(gameRef, {
+        [`placement.${teamId}.isLocked`]: true,
+      });
+    }
   });
 }

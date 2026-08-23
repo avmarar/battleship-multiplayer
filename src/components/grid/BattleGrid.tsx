@@ -22,7 +22,10 @@ export type CellMark =
   | "ship"
   | "ship-selected"
   | "preview-valid"
-  | "preview-invalid";
+  | "preview-invalid"
+  | "hit"
+  | "miss"
+  | "sunk";
 
 export type BattleGridProps = {
   selectedCoordinate?: GridCoordinate | null;
@@ -188,6 +191,15 @@ function cellSurfaceClass(
   isSelected: boolean,
   isHovered: boolean
 ) {
+  if (mark === "sunk") {
+    return "border-red-500 bg-red-700/60";
+  }
+  if (mark === "hit") {
+    return "border-orange-400 bg-orange-500/40";
+  }
+  if (mark === "miss") {
+    return "border-slate-400 bg-slate-500/30";
+  }
   if (mark === "preview-invalid") {
     return "border-[#FF4500] bg-orange-500/25";
   }

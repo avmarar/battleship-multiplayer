@@ -19,6 +19,10 @@ export type GameDocument = {
   teams: Record<GameTeamId, GameTeamSummary>;
   placement: Record<GameTeamId, GamePlacementLock>;
   createdAt: Timestamp;
+  lobbyId?: string;
+  turnOrder?: string[];
+  currentTurnIndex?: number;
+  winnerTeam?: GameTeamId;
 };
 
 export type GameTeamDocument = {

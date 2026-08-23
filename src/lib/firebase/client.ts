@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
+import {
+  connectAuthEmulator,
+  getAuth,
+  signInAnonymously,
+  type Auth,
+} from "firebase/auth";
 import {
   connectFirestoreEmulator,
   getFirestore,
@@ -7,11 +12,16 @@ import {
 } from "firebase/firestore";
 import { firebaseConfig, firebaseConfigReady } from "./config";
 
-let cachedApp: FirebaseApp | null = null;
-let cachedDb: Firestore | null = null;
-let cachedAuth: Auth | null = null;
-let authEmulatorConnected = false;
-let firestoreEmulatorConnected = false;
+type FirebaseGlobals = {
+  __battleshipFirebaseApp?: FirebaseApp;
+  __battleshipFirestore?: Firestore;
+  __battleshipAuth?: Auth;
+  __battleshipAuthEmulatorConnected?: boolean;
+  __battleshipFirestoreEmulatorConnected?: boolean;
+  __battleshipAnonymousSignIn?: Promise<unknown> | null;
+};
+
+const globals = globalThis as typeof globalThis & FirebaseGlobals;
 
 const useEmulators =
   typeof process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== "undefined" &&
@@ -26,13 +36,15 @@ export function getFirebaseApp(): FirebaseApp | null {
     return null;
   }
 
-  if (cachedApp) {
-    return cachedApp;
+  if (globals.__battleshipFirebaseApp) {
+    return globals.__battleshipFirebaseApp;
   }
 
-  cachedApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  globals.__battleshipFirebaseApp = getApps().length
+    ? getApp()
+    : initializeApp(firebaseConfig);
 
-  return cachedApp;
+  return globals.__battleshipFirebaseApp;
 }
 
 export function getFirestoreDb(): Firestore | null {
@@ -40,8 +52,8 @@ export function getFirestoreDb(): Firestore | null {
     return null;
   }
 
-  if (cachedDb) {
-    return cachedDb;
+  if (globals.__battleshipFirestore) {
+    return globals.__battleshipFirestore;
   }
 
   const app = getFirebaseApp();
@@ -49,17 +61,18 @@ export function getFirestoreDb(): Firestore | null {
     return null;
   }
 
-  cachedDb = getFirestore(app);
-  if (useEmulators && !firestoreEmulatorConnected) {
+  const db = getFirestore(app);
+  if (useEmulators && !globals.__battleshipFirestoreEmulatorConnected) {
     try {
-      connectFirestoreEmulator(cachedDb, "127.0.0.1", 8080);
+      connectFirestoreEmulator(db, "127.0.0.1", 8080);
     } catch {
       // Already connected (Fast Refresh / repeated init).
     }
-    firestoreEmulatorConnected = true;
+    globals.__battleshipFirestoreEmulatorConnected = true;
   }
 
-  return cachedDb;
+  globals.__battleshipFirestore = db;
+  return db;
 }
 
 export function getFirebaseAuth(): Auth | null {
@@ -67,8 +80,8 @@ export function getFirebaseAuth(): Auth | null {
     return null;
   }
 
-  if (cachedAuth) {
-    return cachedAuth;
+  if (globals.__battleshipAuth) {
+    return globals.__battleshipAuth;
   }
 
   const app = getFirebaseApp();
@@ -76,17 +89,35 @@ export function getFirebaseAuth(): Auth | null {
     return null;
   }
 
-  cachedAuth = getAuth(app);
-  if (useEmulators && !authEmulatorConnected) {
+  const auth = getAuth(app);
+  if (useEmulators && !globals.__battleshipAuthEmulatorConnected) {
     try {
-      connectAuthEmulator(cachedAuth, "http://127.0.0.1:9099", {
+      connectAuthEmulator(auth, "http://127.0.0.1:9099", {
         disableWarnings: true,
       });
     } catch {
       // Already connected (Fast Refresh / repeated init).
     }
-    authEmulatorConnected = true;
+    globals.__battleshipAuthEmulatorConnected = true;
   }
 
-  return cachedAuth;
+  globals.__battleshipAuth = auth;
+  return auth;
+}
+
+/** Single-flight anonymous sign-in (avoids Strict Mode / remount duplicate signUp). */
+export function ensureAnonymousSignIn(auth: Auth): Promise<unknown> {
+  if (auth.currentUser) {
+    return Promise.resolve(auth.currentUser);
+  }
+
+  if (!globals.__battleshipAnonymousSignIn) {
+    globals.__battleshipAnonymousSignIn = signInAnonymously(auth).finally(() => {
+      if (!auth.currentUser) {
+        globals.__battleshipAnonymousSignIn = null;
+      }
+    });
+  }
+
+  return globals.__battleshipAnonymousSignIn;
 }

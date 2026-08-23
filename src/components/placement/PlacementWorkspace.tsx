@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { BattleGrid, type CellMark } from "@/components/grid/BattleGrid";
 import { ShipTray } from "@/components/placement/ShipTray";
@@ -50,6 +51,7 @@ export function PlacementWorkspace({
   autoQuickPlay = false,
   initialGameId = null,
 }: PlacementWorkspaceProps) {
+  const router = useRouter();
   const auth = useAnonymousAuth();
   const [ships, setShips] = useState<PlacedShip[]>([]);
   const [selectedId, setSelectedId] = useState<ShipType | null>(null);
@@ -165,10 +167,13 @@ export function PlacementWorkspace({
         if (team && data.placement[team].isLocked) {
           setLockState("locked");
         }
+        if (data.status === "BATTLE" || data.status === "ENDED") {
+          router.push(`/game?gameId=${gameId}`);
+        }
       },
       (error) => setErrorMessage(error.message)
     );
-  }, [db, gameId, uid]);
+  }, [db, gameId, uid, router]);
 
   useEffect(() => {
     if (!drag) {

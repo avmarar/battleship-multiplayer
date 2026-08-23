@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import {
   onAuthStateChanged,
-  signInAnonymously,
   type Auth,
 } from "firebase/auth";
 import {
+  ensureAnonymousSignIn,
   getFirebaseAuth,
   getFirestoreDb,
   isFirebaseReady,
@@ -34,11 +34,12 @@ export function subscribeToAnonymousAuth(
     (error) => onChange({ status: "error", message: error.message })
   );
 
-  if (!auth.currentUser) {
-    void signInAnonymously(auth).catch((error) =>
-      onChange({ status: "error", message: error.message })
-    );
-  }
+  void ensureAnonymousSignIn(auth).catch((error) =>
+    onChange({
+      status: "error",
+      message: error instanceof Error ? error.message : "Anonymous sign-in failed.",
+    })
+  );
 
   return unsubscribe;
 }

@@ -4,7 +4,7 @@ This repository hosts the Sprint 1 proof-of-concept for the Battleship Multiplay
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24+ (CI uses the version in `.nvmrc`)
 - npm (bundled with Node)
 - Firebase project configured for Web (Firestore + Anonymous Auth)
 

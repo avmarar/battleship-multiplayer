@@ -49,6 +49,7 @@ export function JoinAndCreateColumn({
         </p>
         <button
           type="button"
+          data-testid="create-lobby"
           onClick={onCreateLobby}
           disabled={createLobbyState === "creating" || !canCreateLobby}
           className="mt-4 inline-flex items-center rounded-full bg-linear-to-r from-cyan-400 to-emerald-400 px-5 py-2 text-sm font-semibold text-[#04101b] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
@@ -74,6 +75,8 @@ export function JoinAndCreateColumn({
           Invite Code
           <input
             type="text"
+            name="inviteCode"
+            data-testid="join-code-input"
             value={joinCodeInput}
             onChange={(event) => onJoinCodeChange(event.target.value.toUpperCase())}
             placeholder="e.g. Z3K9QJ"
@@ -109,6 +112,7 @@ export function JoinAndCreateColumn({
         </fieldset>
         <button
           type="submit"
+          data-testid="join-lobby"
           disabled={joinFlowState === "submitting" || !canJoinLobby}
           className="inline-flex items-center rounded-full bg-linear-to-r from-emerald-400 to-blue-500 px-5 py-2 text-sm font-semibold text-[#06121c] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -127,7 +131,10 @@ export function JoinAndCreateColumn({
           <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
             Join Request Status
           </p>
-          <p className="mt-2 text-2xl font-semibold text-white">
+          <p
+            className="mt-2 text-2xl font-semibold text-white"
+            data-testid="join-request-status"
+          >
             {pendingJoinRequest.status}
           </p>
           <p className="text-white/60">

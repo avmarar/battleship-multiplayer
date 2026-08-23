@@ -5,15 +5,19 @@ import { fleetEntry, type Orientation, type ShipType } from "@/lib/grid/fleet";
 
 type ShipTrayProps = {
   unplaced: ShipType[];
+  selectedType?: ShipType | null;
   orientation: Orientation;
   disabled: boolean;
+  onSelect: (type: ShipType) => void;
   onDragStart: (type: ShipType, event: PointerEvent) => void;
 };
 
 export function ShipTray({
   unplaced,
+  selectedType = null,
   orientation,
   disabled,
+  onSelect,
   onDragStart,
 }: ShipTrayProps) {
   return (
@@ -32,9 +36,16 @@ export function ShipTray({
                 <button
                   type="button"
                   disabled={disabled}
+                  data-testid={`ship-tray-${type}`}
+                  aria-pressed={selectedType === type}
+                  onClick={() => onSelect(type)}
                   onPointerDown={(event) => onDragStart(type, event)}
-                  className="touch-none rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-left transition hover:border-cyan-400/60 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label={`Drag ${ship.name}, length ${ship.size}`}
+                  className={`touch-none rounded-2xl border px-3 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    selectedType === type
+                      ? "border-cyan-400/80 bg-cyan-400/10"
+                      : "border-white/15 bg-white/5 hover:border-cyan-400/60"
+                  }`}
+                  aria-label={`Place ${ship.name}, length ${ship.size}`}
                 >
                   <p className="text-sm font-semibold text-white">{ship.name}</p>
                   <p className="text-xs text-white/50">{ship.size} cells</p>

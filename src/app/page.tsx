@@ -50,6 +50,7 @@ export default function Home() {
             </p>
             <Link
               href="/placement?quickPlay=1"
+              data-testid="hub-quick-play"
               className="inline-flex rounded-full bg-[#00CED1] px-6 py-3 text-sm font-semibold uppercase tracking-wide text-[#041218] transition hover:brightness-110 hover:text-[#041218] active:scale-90"
             >
               Quick Play

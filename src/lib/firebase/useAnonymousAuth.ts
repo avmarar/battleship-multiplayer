@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signInAnonymously,
+  type Auth,
+} from "firebase/auth";
 import {
   getFirebaseAuth,
   getFirestoreDb,
@@ -13,6 +17,31 @@ export type AnonymousAuthState =
   | { status: "checking" }
   | { status: "error"; message: string }
   | { status: "connected"; uid: string };
+
+export function subscribeToAnonymousAuth(
+  auth: Auth,
+  onChange: (state: AnonymousAuthState) => void
+) {
+  const unsubscribe = onAuthStateChanged(
+    auth,
+    (user) => {
+      if (user) {
+        onChange({ status: "connected", uid: user.uid });
+      } else {
+        onChange({ status: "checking" });
+      }
+    },
+    (error) => onChange({ status: "error", message: error.message })
+  );
+
+  if (!auth.currentUser) {
+    void signInAnonymously(auth).catch((error) =>
+      onChange({ status: "error", message: error.message })
+    );
+  }
+
+  return unsubscribe;
+}
 
 export function useAnonymousAuth() {
   const firebaseAvailable = isFirebaseReady();
@@ -40,25 +69,7 @@ export function useAnonymousAuth() {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (user) => {
-        if (user) {
-          setState({ status: "connected", uid: user.uid });
-        } else {
-          setState({ status: "checking" });
-        }
-      },
-      (error) => setState({ status: "error", message: error.message })
-    );
-
-    if (!auth.currentUser) {
-      signInAnonymously(auth).catch((error) =>
-        setState({ status: "error", message: error.message })
-      );
-    }
-
-    return () => unsubscribe();
+    return subscribeToAnonymousAuth(auth, setState);
   }, [auth]);
 
   return {

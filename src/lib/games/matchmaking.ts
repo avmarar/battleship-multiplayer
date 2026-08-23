@@ -2,10 +2,12 @@ import {
   collection,
   doc,
   type Firestore,
+  getDoc,
   onSnapshot,
   query,
   runTransaction,
-  serverTimestamp,
+  setDoc,
+  Timestamp,
   where,
 } from "firebase/firestore";
 import {
@@ -49,8 +51,61 @@ function gamePayload(alphaUid: string, betaUid: string) {
       ALPHA: { isLocked: false },
       BETA: { isLocked: false },
     },
-    createdAt: serverTimestamp(),
+    createdAt: Timestamp.now(),
   };
+}
+
+function isPermissionDenied(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "permission-denied"
+  );
+}
+
+async function writeTeamDocs(
+  db: Firestore,
+  gameId: string,
+  alphaUid: string,
+  betaUid: string
+) {
+  const gameRef = doc(db, GAMES_COLLECTION, gameId);
+  await Promise.all([
+    setDoc(doc(gameRef, GAME_TEAMS_COLLECTION, "ALPHA"), teamPayload("ALPHA", alphaUid)),
+    setDoc(doc(gameRef, GAME_TEAMS_COLLECTION, "BETA"), teamPayload("BETA", betaUid)),
+  ]);
+}
+
+async function joinQuickPlayDirect(
+  db: Firestore,
+  uid: string,
+  nickname: string
+): Promise<QuickPlayResult> {
+  const slotRef = doc(db, MATCHMAKING_SLOT_PATH[0], MATCHMAKING_SLOT_PATH[1]);
+  const slotSnapshot = await getDoc(slotRef);
+  const waitingUid = slotSnapshot.exists()
+    ? (slotSnapshot.data()?.uid as string | null)
+    : null;
+
+  if (waitingUid && waitingUid !== uid) {
+    const gameRef = doc(collection(db, GAMES_COLLECTION));
+    await setDoc(gameRef, gamePayload(waitingUid, uid));
+    await setDoc(slotRef, {
+      uid: null,
+      nickname: null,
+      updatedAt: Timestamp.now(),
+    });
+    await writeTeamDocs(db, gameRef.id, waitingUid, uid);
+    return { status: "matched", gameId: gameRef.id };
+  }
+
+  await setDoc(slotRef, {
+    uid,
+    nickname,
+    updatedAt: Timestamp.now(),
+  });
+  return { status: "waiting" };
 }
 
 export async function joinQuickPlay(
@@ -61,37 +116,55 @@ export async function joinQuickPlay(
   const slotRef = doc(db, MATCHMAKING_SLOT_PATH[0], MATCHMAKING_SLOT_PATH[1]);
   const gameRef = doc(collection(db, GAMES_COLLECTION));
 
-  return runTransaction(db, async (transaction) => {
-    const slotSnapshot = await transaction.get(slotRef);
-    const waitingUid = slotSnapshot.exists()
-      ? (slotSnapshot.data()?.uid as string | null)
-      : null;
+  if (typeof window !== "undefined") {
+    return joinQuickPlayDirect(db, uid, nickname);
+  }
 
-    if (waitingUid && waitingUid !== uid) {
-      transaction.set(gameRef, gamePayload(waitingUid, uid));
-      transaction.set(
-        doc(gameRef, GAME_TEAMS_COLLECTION, "ALPHA"),
-        teamPayload("ALPHA", waitingUid)
-      );
-      transaction.set(
-        doc(gameRef, GAME_TEAMS_COLLECTION, "BETA"),
-        teamPayload("BETA", uid)
-      );
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const slotSnapshot = await transaction.get(slotRef);
+      const waitingUid = slotSnapshot.exists()
+        ? (slotSnapshot.data()?.uid as string | null)
+        : null;
+
+      if (waitingUid && waitingUid !== uid) {
+        transaction.set(gameRef, gamePayload(waitingUid, uid));
+        transaction.set(slotRef, {
+          uid: null,
+          nickname: null,
+          updatedAt: Timestamp.now(),
+        });
+        return {
+          status: "matched" as const,
+          gameId: gameRef.id,
+          alphaUid: waitingUid,
+          betaUid: uid,
+        };
+      }
+
       transaction.set(slotRef, {
-        uid: null,
-        nickname: null,
-        updatedAt: serverTimestamp(),
+        uid,
+        nickname,
+        updatedAt: Timestamp.now(),
       });
-      return { status: "matched", gameId: gameRef.id } satisfies QuickPlayResult;
+      return { status: "waiting" as const };
+    });
+
+    if (result.status === "matched") {
+      // Team docs cannot be created in the same transaction as the game:
+      // rules call get() on the parent, which only sees committed data.
+      await writeTeamDocs(db, result.gameId, result.alphaUid, result.betaUid);
+      return { status: "matched", gameId: result.gameId };
     }
 
-    transaction.set(slotRef, {
-      uid,
-      nickname,
-      updatedAt: serverTimestamp(),
-    });
-    return { status: "waiting" } satisfies QuickPlayResult;
-  });
+    return result;
+  } catch (error) {
+    // Browser transactions against the emulator often arrive without auth.
+    if (isPermissionDenied(error)) {
+      return joinQuickPlayDirect(db, uid, nickname);
+    }
+    throw error;
+  }
 }
 
 export async function cancelQuickPlay(db: Firestore, uid: string) {
@@ -105,7 +178,7 @@ export async function cancelQuickPlay(db: Firestore, uid: string) {
       transaction.set(slotRef, {
         uid: null,
         nickname: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: Timestamp.now(),
       });
     }
   });

@@ -56,11 +56,17 @@ export function ActiveLobbyPanel({
           <div className="flex flex-wrap gap-3 text-sm text-white/70">
             <span className="rounded-full border border-white/10 px-3 py-1">
               Invite:{" "}
-              <span className="font-semibold text-white">
+              <span
+                className="font-semibold text-white"
+                data-testid="invite-code"
+              >
                 {activeLobby.inviteCode}
               </span>
             </span>
-            <span className="rounded-full border border-white/10 px-3 py-1">
+            <span
+              className="rounded-full border border-white/10 px-3 py-1"
+              data-testid="lobby-member-count"
+            >
               Members {activeLobby.memberIds.length}/{activeLobby.maxMembers}
             </span>
             <span className="rounded-full border border-white/10 px-3 py-1">
@@ -127,6 +133,7 @@ export function ActiveLobbyPanel({
                           <div className="flex gap-2">
                             <button
                               type="button"
+                              data-testid="approve-join"
                               onClick={() => onApproveJoinRequest(request)}
                               className="rounded-full bg-emerald-400/90 px-4 py-2 text-xs font-semibold text-[#041218] hover:bg-emerald-300/90"
                             >

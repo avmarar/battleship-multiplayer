@@ -1,11 +1,17 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
+import {
+  connectFirestoreEmulator,
+  getFirestore,
+  type Firestore,
+} from "firebase/firestore";
 import { firebaseConfig, firebaseConfigReady } from "./config";
 
 let cachedApp: FirebaseApp | null = null;
 let cachedDb: Firestore | null = null;
 let cachedAuth: Auth | null = null;
+let authEmulatorConnected = false;
+let firestoreEmulatorConnected = false;
 
 const useEmulators =
   typeof process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== "undefined" &&
@@ -44,12 +50,13 @@ export function getFirestoreDb(): Firestore | null {
   }
 
   cachedDb = getFirestore(app);
-  if (useEmulators && typeof window !== "undefined") {
-    import("firebase/firestore").then(({ connectFirestoreEmulator }) => {
-      if (cachedDb) {
-        connectFirestoreEmulator(cachedDb, "localhost", 8080);
-      }
-    });
+  if (useEmulators && !firestoreEmulatorConnected) {
+    try {
+      connectFirestoreEmulator(cachedDb, "127.0.0.1", 8080);
+    } catch {
+      // Already connected (Fast Refresh / repeated init).
+    }
+    firestoreEmulatorConnected = true;
   }
 
   return cachedDb;
@@ -70,16 +77,15 @@ export function getFirebaseAuth(): Auth | null {
   }
 
   cachedAuth = getAuth(app);
-  if (useEmulators && typeof window !== "undefined") {
-    // Lazy import to avoid shipping emulator code to production bundles unintentionally.
-    import("firebase/auth").then(({ connectAuthEmulator }) => {
-      if (cachedAuth) {
-        connectAuthEmulator(cachedAuth, "http://localhost:9099", {
-          disableWarnings: true,
-        });
-      }
-    });
-
+  if (useEmulators && !authEmulatorConnected) {
+    try {
+      connectAuthEmulator(cachedAuth, "http://127.0.0.1:9099", {
+        disableWarnings: true,
+      });
+    } catch {
+      // Already connected (Fast Refresh / repeated init).
+    }
+    authEmulatorConnected = true;
   }
 
   return cachedAuth;

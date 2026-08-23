@@ -317,10 +317,32 @@ export function PlacementWorkspace({
       return;
     }
     const occupant = shipAtCoordinate(ships, coordinate);
-    setSelectedId(occupant?.id ?? null);
     if (occupant) {
+      setSelectedId(occupant.id);
       setOrientation(occupant.orientation);
+      return;
     }
+
+    if (selectedId && unplaced.includes(selectedId)) {
+      const placed = buildPlacedShip(
+        selectedId,
+        coordinate,
+        orientation,
+        ships
+      );
+      if (!placed) {
+        setErrorMessage(
+          "Invalid placement. Ships cannot overlap or leave the grid."
+        );
+        return;
+      }
+      setShips((existing) => [...existing, placed]);
+      setSelectedId(placed.id);
+      setErrorMessage(null);
+      return;
+    }
+
+    setSelectedId(null);
   };
 
   const handleReturnToTray = () => {
@@ -362,6 +384,8 @@ export function PlacementWorkspace({
         setGameId(result.gameId);
         setMatchState("matched");
         setStatusMessage("Opponent found. Place your fleet.");
+      } else {
+        setStatusMessage("Waiting in queue…");
       }
     } catch (error) {
       setMatchState("idle");
@@ -426,6 +450,7 @@ export function PlacementWorkspace({
             {matchState === "idle" && (
               <button
                 type="button"
+                data-testid="quick-play"
                 onClick={() => void startQuickPlay()}
                 className="rounded-full bg-[#00CED1] px-5 py-2 text-sm font-semibold text-[#041218] transition hover:brightness-110 active:scale-90"
               >
@@ -443,14 +468,24 @@ export function PlacementWorkspace({
             )}
           </div>
           {auth.status === "checking" && (
-            <p className="text-sm text-white/60">Signing in anonymously…</p>
+            <p className="text-sm text-white/60" data-testid="auth-pending">
+              Signing in anonymously…
+            </p>
           )}
+          {auth.status === "connected" && auth.uid ? (
+            <p className="font-mono text-xs text-white/60">
+              UID <span data-testid="auth-uid">{auth.uid}</span>
+            </p>
+          ) : null}
           {auth.status === "error" || auth.status === "unavailable" ? (
             <p className="text-sm text-red-300">{auth.message}</p>
           ) : null}
         </header>
 
-        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 text-sm text-cyan-50">
+        <div
+          className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 text-sm text-cyan-50"
+          data-testid="match-status"
+        >
           Placement Phase: Drag and Rotate Ships.
           {matchState === "searching" ? " Searching for opponent…" : null}
           {matchState === "matched" && myTeam ? ` You are Team ${myTeam}.` : null}
@@ -470,8 +505,12 @@ export function PlacementWorkspace({
             <div className="rounded-3xl border border-white/5 bg-white/[0.04] p-4 sm:p-6">
               <ShipTray
                 unplaced={unplaced}
+                selectedType={
+                  selectedId && unplaced.includes(selectedId) ? selectedId : null
+                }
                 orientation={drag?.orientation ?? orientation}
                 disabled={locked}
+                onSelect={setSelectedId}
                 onDragStart={startDrag}
               />
             </div>
@@ -482,11 +521,14 @@ export function PlacementWorkspace({
               <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
                 Fleet status
               </p>
-              <p className="mt-2 text-2xl font-semibold">
+              <p className="mt-2 text-2xl font-semibold" data-testid="fleet-count">
                 {ships.length}/{FLEET.length} placed
               </p>
               {opponentLocked ? (
-                <p className="mt-2 text-sm font-semibold text-[#32CD32]">
+                <p
+                  className="mt-2 text-sm font-semibold text-[#32CD32]"
+                  data-testid="opponent-ready"
+                >
                   Opponent Ready
                 </p>
               ) : gameId ? (
@@ -517,6 +559,7 @@ export function PlacementWorkspace({
 
             <button
               type="button"
+              data-testid="lock-placement"
               onClick={() => void handleLock()}
               disabled={!fleetReady || locked || lockState === "locking" || (!!gameId && !myTeam)}
               className="w-full rounded-full bg-[#00CED1] px-5 py-3 text-sm font-semibold text-[#041218] transition hover:brightness-110 active:scale-90 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40 disabled:hover:brightness-100"
@@ -529,12 +572,17 @@ export function PlacementWorkspace({
             </button>
 
             {bothLocked && (
-              <p className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
+              <p
+                className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"
+                data-testid="both-locked"
+              >
                 Both fleets are locked. Waiting for the battle phase.
               </p>
             )}
             {statusMessage && (
-              <p className="text-sm text-emerald-300">{statusMessage}</p>
+              <p className="text-sm text-emerald-300" data-testid="placement-status">
+                {statusMessage}
+              </p>
             )}
             {errorMessage && (
               <p className="text-sm text-red-300">{errorMessage}</p>

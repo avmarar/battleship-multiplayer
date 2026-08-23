@@ -552,7 +552,10 @@ service cloud.firestore {
 
       allow create: if isAuthenticated() &&
         gameCreateValid(request.resource.data) &&
-        request.auth.uid == request.resource.data.teams.ALPHA.captainId;
+        (
+          request.auth.uid == request.resource.data.teams.ALPHA.captainId ||
+          request.auth.uid == request.resource.data.teams.BETA.captainId
+        );
 
       allow update: if isAuthenticated() &&
         request.auth.uid in resource.data.memberIds &&

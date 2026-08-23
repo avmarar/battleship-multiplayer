@@ -175,7 +175,9 @@ async function shouldEnforceJoinRequestOwnershipRules(testEnv) {
       .get()
   );
 
-  await assertSucceeds(
+  // Owners listen to a concrete request path; collection-group list by userId
+  // is intentionally denied (avoids legacy docs without userId breaking eval).
+  await assertFails(
     requester
       .firestore()
       .collectionGroup("joinRequests")

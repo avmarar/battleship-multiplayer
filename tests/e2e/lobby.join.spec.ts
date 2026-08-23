@@ -6,7 +6,7 @@ test.describe("QA-1.2 lobby create and join", () => {
     await resetEmulators(request);
   });
 
-  test("auth → create lobby → join request → captain approval", async ({
+  test("auth → create lobby → Beta captain → dual ready → start", async ({
     browser,
   }) => {
     const captainContext = await browser.newContext();
@@ -25,6 +25,9 @@ test.describe("QA-1.2 lobby create and join", () => {
       await expect(captain.getByTestId("lobby-member-count")).toHaveText(
         "Members 1/8"
       );
+      await expect(captain.getByTestId("captain-status")).toHaveText(
+        "Awaiting Beta captain"
+      );
 
       const inviteCode = (await captain.getByTestId("invite-code").innerText()).trim();
       const betaCode = (
@@ -34,7 +37,7 @@ test.describe("QA-1.2 lobby create and join", () => {
 
       await crew.goto("/lobby");
       await waitForAnonymousAuth(crew);
-      await crew.getByTestId("join-code-input").fill(inviteCode);
+      await crew.getByTestId("join-code-input").fill(betaCode);
       await crew.getByTestId("join-lobby").click();
       await expect(crew.getByTestId("join-request-status")).toHaveText("PENDING");
 
@@ -52,6 +55,10 @@ test.describe("QA-1.2 lobby create and join", () => {
         "Members 2/8"
       );
       await expect(crew.getByTestId("join-request-status")).toHaveText("APPROVED");
+      await expect(captain.getByTestId("captain-status")).toHaveText(
+        "Alpha + Beta captains"
+      );
+      await expect(crew.getByText("Captain · BETA · You")).toBeVisible();
 
       await expect(captain.getByTestId("start-placement")).toBeDisabled();
       await captain.getByTestId("toggle-ready").click();

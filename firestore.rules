@@ -17,12 +17,33 @@ service cloud.firestore {
       return get(lobbyPath(lobbyId)).data;
     }
 
+    function isAlphaCaptain(lobbyId) {
+      return isAuthenticated() &&
+        lobbyExists(lobbyId) &&
+        lobbyData(lobbyId).captainId == request.auth.uid;
+    }
+
+    function isBetaCaptain(lobbyId) {
+      return isAuthenticated() &&
+        lobbyExists(lobbyId) &&
+        lobbyData(lobbyId).keys().hasAny(['captainIdBeta']) &&
+        lobbyData(lobbyId).captainIdBeta == request.auth.uid;
+    }
+
     function isLobbyCaptain(lobbyId) {
-      let isAuth = isAuthenticated();
-      let exists = lobbyExists(lobbyId);
-      let data = exists ? lobbyData(lobbyId) : null;
-      return isAuth && exists && data != null &&
-        data.captainId == request.auth.uid;
+      return isAlphaCaptain(lobbyId);
+    }
+
+    function isTeamCaptain(lobbyId) {
+      return isAlphaCaptain(lobbyId) || isBetaCaptain(lobbyId);
+    }
+
+    function canDecideJoinRequest(lobbyId) {
+      let team = resource.data.requestedTeam;
+      return (isAlphaCaptain(lobbyId) && team == 'ALPHA') ||
+        (isAlphaCaptain(lobbyId) && team == 'BETA' &&
+          !lobbyData(lobbyId).keys().hasAny(['captainIdBeta'])) ||
+        (isBetaCaptain(lobbyId) && team == 'BETA');
     }
 
     function allowedLobbyStatuses() {
@@ -64,7 +85,8 @@ service cloud.firestore {
       return (data.keys().hasAny(['status']) ? (data.status is string && data.status in allowedLobbyStatuses()) : true) &&
         (data.keys().hasAny(['isLocked']) ? data.isLocked is bool : true) &&
         (data.keys().hasAny(['memberIds']) ? data.memberIds is list : true) &&
-        (data.keys().hasAny(['members']) ? data.members is map : true);
+        (data.keys().hasAny(['members']) ? data.members is map : true) &&
+        (data.keys().hasAny(['captainIdBeta']) ? (data.captainIdBeta is string && data.captainIdBeta.size() > 0) : true);
     }
 
     function lobbyImmutableFieldsUnchanged() {
@@ -72,7 +94,12 @@ service cloud.firestore {
         (request.resource.data.keys().hasAny(['inviteCodeBeta']) ? request.resource.data.inviteCodeBeta == resource.data.inviteCodeBeta : true) &&
         (request.resource.data.keys().hasAny(['createdAt']) ? request.resource.data.createdAt == resource.data.createdAt : true) &&
         (request.resource.data.keys().hasAny(['captainId']) ? request.resource.data.captainId == resource.data.captainId : true) &&
-        (request.resource.data.keys().hasAny(['maxMembers']) ? request.resource.data.maxMembers == resource.data.maxMembers : true);
+        (request.resource.data.keys().hasAny(['maxMembers']) ? request.resource.data.maxMembers == resource.data.maxMembers : true) &&
+        (
+          resource.data.keys().hasAny(['captainIdBeta'])
+            ? request.resource.data.captainIdBeta == resource.data.captainIdBeta
+            : true
+        );
     }
 
     function onlyOwnReadyFlagChanged() {
@@ -83,6 +110,21 @@ service cloud.firestore {
         request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([uid]) &&
         request.resource.data.members[uid].diff(resource.data.members[uid]).affectedKeys().hasOnly(['isReady']) &&
         request.resource.data.members[uid].isReady is bool;
+    }
+
+    function betaCaptainMembershipUpdate() {
+      return isAuthenticated() &&
+        resource.data.keys().hasAny(['captainIdBeta']) &&
+        resource.data.captainIdBeta == request.auth.uid &&
+        request.resource.data.captainId == resource.data.captainId &&
+        request.resource.data.captainIdBeta == resource.data.captainIdBeta &&
+        request.resource.data.inviteCode == resource.data.inviteCode &&
+        request.resource.data.inviteCodeBeta == resource.data.inviteCodeBeta &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.maxMembers == resource.data.maxMembers &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.isLocked == resource.data.isLocked &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members']);
     }
 
     function isValidJoinRequestData(lobbyId, requestId, data) {
@@ -119,6 +161,7 @@ service cloud.firestore {
         resource.data.captainId == request.auth.uid &&
         lobbyUpdateFieldsValid(request.resource.data) &&
         lobbyImmutableFieldsUnchanged()) ||
+        betaCaptainMembershipUpdate() ||
         onlyOwnReadyFlagChanged();
 
       allow delete: if isAuthenticated() &&
@@ -131,7 +174,7 @@ service cloud.firestore {
     }
 
     match /lobbies/{lobbyId}/joinRequests/{requestId} {
-      allow read: if isLobbyCaptain(lobbyId) ||
+      allow read: if isTeamCaptain(lobbyId) ||
         (isAuthenticated() &&
           (request.auth.uid == requestId ||
             resource.data.userId == request.auth.uid));
@@ -144,10 +187,10 @@ service cloud.firestore {
         joinRequestTeamMatchesInvite(lobbyId, request.resource.data) &&
         request.resource.data.status == 'PENDING';
 
-      allow update: if isLobbyCaptain(lobbyId) &&
+      allow update: if canDecideJoinRequest(lobbyId) &&
         isValidJoinRequestData(lobbyId, requestId, request.resource.data);
 
-      allow delete: if isLobbyCaptain(lobbyId) ||
+      allow delete: if isTeamCaptain(lobbyId) ||
         (isAuthenticated() && request.auth.uid == requestId);
     }
 

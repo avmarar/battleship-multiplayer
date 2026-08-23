@@ -19,6 +19,8 @@ export type LobbyDocument = {
   inviteCode: string;
   inviteCodeBeta?: string;
   captainId: string;
+  /** Set when the first Beta member is approved as team captain. */
+  captainIdBeta?: string;
   status: LobbyStatus;
   isLocked: boolean;
   maxMembers: number;

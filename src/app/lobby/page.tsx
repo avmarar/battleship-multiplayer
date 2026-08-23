@@ -27,7 +27,14 @@ import {
   getFirestoreDb,
   isFirebaseReady,
 } from "@/lib/firebase/client";
-import { allMembersReady } from "@/lib/lobbies/ready";
+import {
+  canManageJoinTeam,
+  canStartPlacement,
+  filterJoinRequestsForCaptain,
+  isAlphaCaptain,
+  isAnyTeamCaptain,
+  lobbyPatchForApproval,
+} from "@/lib/lobbies/captains";
 import {
   DEFAULT_MAX_MEMBERS,
   type LobbyDocument,
@@ -259,10 +266,12 @@ export default function Home() {
     return () => unsubscribe();
   }, [firestoreDb, connectedUid]);
 
-  const isLobbyCaptain = activeLobby?.captainId === connectedUid;
+  const isAlphaLobbyCaptain = !!activeLobby && isAlphaCaptain(activeLobby, connectedUid);
+  const isTeamCaptain =
+    !!activeLobby && isAnyTeamCaptain(activeLobby, connectedUid);
 
   useEffect(() => {
-    if (!firestoreDb || !activeLobby?.id || !isLobbyCaptain) {
+    if (!firestoreDb || !activeLobby?.id || !isTeamCaptain) {
       setCaptainJoinRequests([]);
       return;
     }
@@ -290,13 +299,15 @@ export default function Home() {
               b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
             return aTime - bTime;
           });
-        setCaptainJoinRequests(requests);
+        setCaptainJoinRequests(
+          filterJoinRequestsForCaptain(activeLobby, connectedUid, requests)
+        );
       },
       (error) => setLobbyActionError(error.message)
     );
 
     return () => unsubscribe();
-  }, [firestoreDb, activeLobby?.id, isLobbyCaptain]);
+  }, [firestoreDb, activeLobby, connectedUid, isTeamCaptain]);
 
   const visibleProfile = shouldSubscribeToProfile ? profile : null;
 
@@ -464,7 +475,7 @@ export default function Home() {
       });
 
       setJoinFlowMessage(
-        "Join request sent. The captain will approve or reject shortly."
+        "Join request sent. Your team captain will approve or reject shortly."
       );
     } catch (error) {
       const message =
@@ -519,12 +530,16 @@ export default function Home() {
   };
 
   const handleStartPlacement = async () => {
-    if (!firestoreDb || !activeLobby || !isLobbyCaptain) {
+    if (!firestoreDb || !activeLobby || !isAlphaLobbyCaptain) {
       return;
     }
 
-    if (!allMembersReady(lobbyMembers)) {
-      setLobbyActionError("All members must be ready before starting placement.");
+    if (!canStartPlacement(activeLobby, lobbyMembers)) {
+      setLobbyActionError(
+        activeLobby.captainIdBeta
+          ? "Both captains and all members must be ready before starting placement."
+          : "Approve a Beta captain before starting placement."
+      );
       return;
     }
 
@@ -544,7 +559,7 @@ export default function Home() {
   };
 
   const handleToggleLobbyLock = async () => {
-    if (!firestoreDb || !activeLobby || !isLobbyCaptain) {
+    if (!firestoreDb || !activeLobby || !isAlphaLobbyCaptain) {
       return;
     }
 
@@ -563,7 +578,12 @@ export default function Home() {
   };
 
   const handleApproveJoinRequest = async (request: JoinRequestWithPath) => {
-    if (!firestoreDb || !activeLobby || !isLobbyCaptain) {
+    if (
+      !firestoreDb ||
+      !activeLobby ||
+      !connectedUid ||
+      !canManageJoinTeam(activeLobby, connectedUid, request.requestedTeam)
+    ) {
       return;
     }
 
@@ -577,6 +597,12 @@ export default function Home() {
         }
 
         const lobbyData = lobbySnapshot.data() as LobbyDocument;
+        if (
+          !canManageJoinTeam(lobbyData, connectedUid, request.requestedTeam)
+        ) {
+          throw new Error("You cannot approve joiners for that team.");
+        }
+
         if (lobbyData.memberIds?.includes(request.userId)) {
           throw new Error("Player is already in the lobby.");
         }
@@ -596,14 +622,13 @@ export default function Home() {
           request.userId
         );
 
+        const patch = lobbyPatchForApproval(lobbyData, request);
+        const memberKey = `members.${request.userId}`;
+        const member = patch[memberKey] as Record<string, unknown>;
         transaction.update(lobbyRef, {
-          memberIds: [...(lobbyData.memberIds || []), request.userId],
-          [`members.${request.userId}`]: {
-            userId: request.userId,
-            nickname: request.nickname,
-            role: "CREW",
-            team: request.requestedTeam,
-            isReady: false,
+          ...patch,
+          [memberKey]: {
+            ...member,
             joinedAt: serverTimestamp(),
           },
         });
@@ -624,7 +649,12 @@ export default function Home() {
   };
 
   const handleRejectJoinRequest = async (request: JoinRequestWithPath) => {
-    if (!firestoreDb || !activeLobby || !isLobbyCaptain) {
+    if (
+      !firestoreDb ||
+      !activeLobby ||
+      !connectedUid ||
+      !canManageJoinTeam(activeLobby, connectedUid, request.requestedTeam)
+    ) {
       return;
     }
 
@@ -654,7 +684,7 @@ export default function Home() {
   };
 
   const handleDisbandLobby = async () => {
-    if (!firestoreDb || !activeLobby || !isLobbyCaptain) {
+    if (!firestoreDb || !activeLobby || !isAlphaLobbyCaptain) {
       return;
     }
 
@@ -773,7 +803,8 @@ export default function Home() {
             activeLobby={activeLobby}
             connectedUid={connectedUid}
             lobbyMembers={lobbyMembers}
-            isLobbyCaptain={isLobbyCaptain}
+            isAlphaCaptain={isAlphaLobbyCaptain}
+            isTeamCaptain={isTeamCaptain}
             captainJoinRequests={captainJoinRequests}
             lobbyActionMessage={lobbyActionMessage}
             lobbyActionError={lobbyActionError}

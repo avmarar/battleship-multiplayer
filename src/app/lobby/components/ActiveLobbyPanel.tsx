@@ -1,5 +1,8 @@
 import {
-  allMembersReady,
+  bothCaptainsPresent,
+  canStartPlacement,
+} from "@/lib/lobbies/captains";
+import {
   countReadyMembers,
   isMemberReady,
 } from "@/lib/lobbies/ready";
@@ -10,7 +13,8 @@ type ActiveLobbyPanelProps = {
   activeLobby: LobbySnapshot | null;
   connectedUid: string | null;
   lobbyMembers: LobbyMember[];
-  isLobbyCaptain: boolean;
+  isAlphaCaptain: boolean;
+  isTeamCaptain: boolean;
   captainJoinRequests: JoinRequestWithPath[];
   lobbyActionMessage: string | null;
   lobbyActionError: string | null;
@@ -27,7 +31,8 @@ export function ActiveLobbyPanel({
   activeLobby,
   connectedUid,
   lobbyMembers,
-  isLobbyCaptain,
+  isAlphaCaptain,
+  isTeamCaptain,
   captainJoinRequests,
   lobbyActionError,
   lobbyActionMessage,
@@ -41,13 +46,15 @@ export function ActiveLobbyPanel({
 }: ActiveLobbyPanelProps) {
   const readyTotals = countReadyMembers(lobbyMembers);
   const canAdvanceToPlacement =
-    isLobbyCaptain &&
-    activeLobby?.status === "LOBBY" &&
-    allMembersReady(lobbyMembers);
+    !!activeLobby &&
+    isAlphaCaptain &&
+    canStartPlacement(activeLobby, lobbyMembers);
   const canToggleReady = activeLobby?.status === "LOBBY" && !!connectedUid;
   const selfIsReady = lobbyMembers.some(
     (member) => member.userId === connectedUid && isMemberReady(member)
   );
+  const awaitingBetaCaptain =
+    !!activeLobby && !bothCaptainsPresent(activeLobby);
 
   return (
     <div className="space-y-5 rounded-3xl border border-white/5 bg-[#050b1a]/80 p-6 shadow-xl shadow-black/30">
@@ -129,6 +136,14 @@ export function ActiveLobbyPanel({
             >
               {activeLobby.status}
             </span>
+            <span
+              className="rounded-full border border-white/10 px-3 py-1"
+              data-testid="captain-status"
+            >
+              {awaitingBetaCaptain
+                ? "Awaiting Beta captain"
+                : "Alpha + Beta captains"}
+            </span>
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
@@ -177,7 +192,7 @@ export function ActiveLobbyPanel({
               ))}
             </div>
           </div>
-          {isLobbyCaptain ? (
+          {isTeamCaptain ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
@@ -189,7 +204,7 @@ export function ActiveLobbyPanel({
               </div>
               {captainJoinRequests.length === 0 ? (
                 <p className="rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/70">
-                  No pending requests yet.
+                  No pending requests for your team yet.
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -246,37 +261,43 @@ export function ActiveLobbyPanel({
                     {selfIsReady ? "Set Not Ready" : "Set Ready"}
                   </button>
                 )}
-                <button
-                  type="button"
-                  data-testid="start-placement"
-                  onClick={onStartPlacement}
-                  disabled={!canAdvanceToPlacement}
-                  className="rounded-full bg-linear-to-r from-cyan-400 to-emerald-400 px-5 py-2 text-sm font-semibold text-[#04101b] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Start Placement
-                </button>
-                <button
-                  type="button"
-                  onClick={onToggleLobbyLock}
-                  className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
-                >
-                  {activeLobby.isLocked ? "Unlock Lobby" : "Lock Lobby"}
-                </button>
-                <button
-                  type="button"
-                  onClick={onDisbandLobby}
-                  className="rounded-full bg-red-500/80 px-5 py-2 text-sm font-semibold text-white hover:bg-red-400/90"
-                >
-                  Disband Lobby
-                </button>
+                {isAlphaCaptain && (
+                  <>
+                    <button
+                      type="button"
+                      data-testid="start-placement"
+                      onClick={onStartPlacement}
+                      disabled={!canAdvanceToPlacement}
+                      className="rounded-full bg-linear-to-r from-cyan-400 to-emerald-400 px-5 py-2 text-sm font-semibold text-[#04101b] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Start Placement
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onToggleLobbyLock}
+                      className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
+                    >
+                      {activeLobby.isLocked ? "Unlock Lobby" : "Lock Lobby"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onDisbandLobby}
+                      className="rounded-full bg-red-500/80 px-5 py-2 text-sm font-semibold text-white hover:bg-red-400/90"
+                    >
+                      Disband Lobby
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ) : (
             <div className="space-y-3">
               <p className="rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/80">
                 {activeLobby.status === "PLACEMENT"
-                  ? "The captain started placement. Ready states are locked."
-                  : "Mark ready when your squad is set. The captain can start placement once everyone is ready."}
+                  ? "Placement started. Ready states are locked."
+                  : awaitingBetaCaptain
+                    ? "Waiting for a Beta captain via the Beta invite. Mark ready when your squad is set."
+                    : "Mark ready when your squad is set. The Alpha captain can start placement once both captains and everyone else are ready."}
               </p>
               {canToggleReady && (
                 <button

@@ -66,6 +66,7 @@ async function run() {
     await shouldBlockJoinRequestsWhenLocked(testEnv);
     await shouldAllowMembersToToggleOwnReady(testEnv);
     await shouldBindJoinRequestsToTeamInviteCodes(testEnv);
+    await shouldEnforceDualTeamCaptainApprovals(testEnv);
   await shouldProtectMatchmakingAndPlacement(testEnv);
   console.log("Firestore security rules tests passed");
   } finally {
@@ -273,6 +274,99 @@ async function shouldBindJoinRequestsToTeamInviteCodes(testEnv) {
           inviteCode: "BETA99",
         })
       )
+  );
+}
+
+async function shouldEnforceDualTeamCaptainApprovals(testEnv) {
+  await testEnv.clearFirestore();
+  await seedLobby(testEnv, "lobby-alpha", lobbyFixture());
+
+  const alphaCaptain = testEnv.authenticatedContext("captain-uid");
+  const betaCaptain = testEnv.authenticatedContext("beta-cap");
+  const outsider = testEnv.authenticatedContext("outsider-uid");
+
+  await assertSucceeds(
+    betaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/beta-cap")
+      .set(
+        joinRequestFixture({
+          userId: "beta-cap",
+          requestedTeam: "BETA",
+          inviteCode: "BETA99",
+          nickname: "Beta Cap",
+        })
+      )
+  );
+
+  // Alpha may seat the first Beta captain while captainIdBeta is still unset.
+  await assertSucceeds(
+    alphaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/beta-cap")
+      .update({ status: "APPROVED" })
+  );
+  await assertSucceeds(
+    alphaCaptain.firestore().doc("lobbies/lobby-alpha").update({
+      memberIds: ["captain-uid", "beta-cap"],
+      captainIdBeta: "beta-cap",
+      "members.beta-cap": {
+        userId: "beta-cap",
+        nickname: "Beta Cap",
+        role: "CAPTAIN",
+        team: "BETA",
+        isReady: false,
+      },
+    })
+  );
+
+  await assertSucceeds(
+    outsider
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/outsider-uid")
+      .set(
+        joinRequestFixture({
+          userId: "outsider-uid",
+          requestedTeam: "BETA",
+          inviteCode: "BETA99",
+          nickname: "Beta Crew",
+        })
+      )
+  );
+
+  // After Beta captain exists, Alpha cannot decide Beta join requests.
+  await assertFails(
+    alphaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/outsider-uid")
+      .update({ status: "APPROVED" })
+  );
+
+  await assertSucceeds(
+    betaCaptain
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/outsider-uid")
+      .update({ status: "APPROVED" })
+  );
+
+  await assertSucceeds(
+    betaCaptain.firestore().doc("lobbies/lobby-alpha").update({
+      memberIds: ["captain-uid", "beta-cap", "outsider-uid"],
+      "members.outsider-uid": {
+        userId: "outsider-uid",
+        nickname: "Beta Crew",
+        role: "CREW",
+        team: "BETA",
+        isReady: false,
+      },
+    })
+  );
+
+  // Beta captain cannot change lobby lock/status.
+  await assertFails(
+    betaCaptain.firestore().doc("lobbies/lobby-alpha").update({
+      isLocked: true,
+    })
   );
 }
 

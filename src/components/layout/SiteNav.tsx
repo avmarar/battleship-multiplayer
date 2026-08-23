@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AccountMenu } from "@/components/auth/AccountMenu";
 
 const items = [
   { href: "/", label: "Hub" },
@@ -45,6 +46,7 @@ export function SiteNav() {
             </Link>
           );
         })}
+        <AccountMenu />
       </div>
     </nav>
   );

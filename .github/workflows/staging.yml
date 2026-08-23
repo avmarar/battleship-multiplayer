@@ -1,0 +1,43 @@
+name: Staging
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+jobs:
+  build:
+    name: Production build gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  deploy:
+    name: Optional Firebase deploy
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Deploy to Firebase (when token is configured)
+        if: env.FIREBASE_TOKEN != ''
+        run: npx firebase deploy --only firestore:rules --project "${{ vars.FIREBASE_PROJECT_ID || 'battleship-multiplayer-demo' }}" --token "$FIREBASE_TOKEN"
+      - name: Skip deploy
+        if: env.FIREBASE_TOKEN == ''
+        run: echo "FIREBASE_TOKEN is not set; staging deploy skipped."

@@ -45,8 +45,9 @@ This repository hosts the Sprint 1 proof-of-concept for the Battleship Multiplay
 | `npm run test:unit` | Auth and placement unit tests (Vitest) |
 | `npm run test:firebase` | Security rules plus matchmaking/lock emulator tests |
 | `npm run test:rules` | Launch the Firestore emulator suite and run the security rule tests |
-| `npm run test:e2e` | Playwright smoke: auth/profile, lobby join, Quick Play lock |
+| `npm run test:e2e` | Playwright smoke: auth/profile, lobby join, Quick Play lock, account + hub |
 | `npm run test:e2e:install` | Download the Chromium browser used by Playwright |
+| `npm run test:load-smoke` | Soft NFR-LOAD: write 50 presence docs to the Firestore emulator |
 | `npm run build`/`start` | Production build & start commands |
 
 ## Firebase Emulators (Optional)
@@ -90,10 +91,27 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:integration
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:rules:run
 ```
 
-## Next Steps
+## Persistent accounts
 
-- Complete CI/CD wiring (end of Sprint 1\).
-- Extend the authenticated PoC into the lobby, placement, and battle sprints documented in `/docs`.
+The app still signs in anonymously on launch so Quick Play and e2e keep working. Use **Guest** in the nav to save an email/password on that same UID (`linkWithCredential`) or sign in to an existing account. Sign out returns you to a new guest session.
+
+## Guest session cleanup (RES-2)
+
+`sweepStaleGuestSessions` deletes guest `profile` + `presence` whose `lastSeenAt` is older than 7 days. It never deletes `leaderboard` or `accountType: registered` rows. Run it from an admin/emulator context (security rules only allow a user to delete their own presence). Production schedule still needs Cloud Functions on Blaze.
+
+## Soft load smoke (NFR-LOAD)
+
+With emulators running:
+
+```bash
+npm run test:load-smoke
+```
+
+This writes 50 presence documents. It is a sanity check, not a full performance lab. CI also runs a 50-session emulator case inside `npm run test:firebase`.
+
+## Staging CI (INF-1.4)
+
+Pushes and PRs to `develop` run `.github/workflows/staging.yml` (`lint`, `typecheck`, `build`). If `FIREBASE_TOKEN` is set on the repo, the workflow also deploys Firestore rules. Hosting/Next export is not required.
 
 ## Git Branching Strategy
 

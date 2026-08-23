@@ -17,6 +17,7 @@
     "test:firebase": "npx firebase emulators:exec --project battleship-multiplayer-demo --only firestore \"npm run test:rules:run && npm run test:integration\"",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
+    "test:load-smoke": "node scripts/load-smoke.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",

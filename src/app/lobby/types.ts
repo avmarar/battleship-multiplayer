@@ -11,6 +11,7 @@ export type ProfileDocument = {
   statusMessage?: string;
   environment?: string;
   lastClientUpdate?: string;
+  accountType?: "guest" | "registered";
   updatedAt?: Timestamp;
 };
 

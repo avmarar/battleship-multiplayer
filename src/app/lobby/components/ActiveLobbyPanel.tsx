@@ -323,6 +323,7 @@ export function ActiveLobbyPanel({
                 </button>
                 <button
                   type="button"
+                  data-testid="disband-match"
                   onClick={onDisbandMatch}
                   className="rounded-full bg-red-500/80 px-5 py-2 text-sm font-semibold text-white hover:bg-red-400/90"
                 >

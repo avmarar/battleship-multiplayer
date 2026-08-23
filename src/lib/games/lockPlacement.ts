@@ -4,6 +4,7 @@ import {
   toLockedPayload,
   type PlacedShip,
 } from "@/lib/grid/placement";
+import { assertTeamCaptain } from "./captain";
 import { buildTurnOrder } from "./combat";
 import { opponentTeam } from "./matchmaking";
 import {
@@ -17,7 +18,8 @@ export async function lockPlacement(
   db: Firestore,
   gameId: string,
   teamId: GameTeamId,
-  ships: PlacedShip[]
+  ships: PlacedShip[],
+  uid: string
 ) {
   if (!isFleetComplete(ships)) {
     throw new Error("Place all five ships before locking.");
@@ -36,6 +38,7 @@ export async function lockPlacement(
     }
 
     const game = gameSnapshot.data() as GameDocument;
+    assertTeamCaptain(game, teamId, uid);
     if (game.status !== "PLACEMENT") {
       throw new Error("Placement is closed.");
     }

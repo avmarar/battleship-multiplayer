@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { BattleGrid, type CellMark } from "@/components/grid/BattleGrid";
 import { ShipTray } from "@/components/placement/ShipTray";
+import { isTeamCaptain } from "@/lib/games/captain";
 import { lockPlacement } from "@/lib/games/lockPlacement";
+import { saveDraftFleet } from "@/lib/games/saveDraftFleet";
 import {
   cancelQuickPlay,
   joinQuickPlay,
@@ -16,11 +18,14 @@ import {
 } from "@/lib/games/matchmaking";
 import {
   GAMES_COLLECTION,
+  GAME_TEAMS_COLLECTION,
   type GameDocument,
+  type GameTeamDocument,
   type GameTeamId,
 } from "@/lib/games/types";
 import { useAnonymousAuth } from "@/lib/firebase/useAnonymousAuth";
 import { FLEET, fleetEntry, type Orientation, type ShipType } from "@/lib/grid/fleet";
+import { draftSignature, fromLockedPayload } from "@/lib/grid/draft";
 import {
   buildPlacedShip,
   isFleetComplete,
@@ -73,12 +78,14 @@ export function PlacementWorkspace({
   const hoverRef = useRef<GridCoordinate | null>(null);
   const shipsRef = useRef<PlacedShip[]>([]);
   const lockedRef = useRef(false);
+  const applyingRemoteRef = useRef(false);
 
   const uid = auth.uid;
   const db = auth.db;
   usePresence({ db, uid, gameId });
   const fleetReady = isFleetComplete(ships);
   const locked = lockState === "locked";
+  const canLock = isTeamCaptain(game, myTeam, uid);
   const unplaced = unplacedTypes(ships);
   const selectedShip = ships.find((ship) => ship.id === selectedId) ?? null;
 
@@ -176,6 +183,44 @@ export function PlacementWorkspace({
       (error) => setErrorMessage(error.message)
     );
   }, [db, gameId, uid, router]);
+
+  useEffect(() => {
+    if (!db || !gameId || !myTeam || locked) {
+      return;
+    }
+    return onSnapshot(
+      doc(db, GAMES_COLLECTION, gameId, GAME_TEAMS_COLLECTION, myTeam),
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          return;
+        }
+        const team = snapshot.data() as GameTeamDocument;
+        const remote = fromLockedPayload(team.ships ?? []);
+        if (dragRef.current) {
+          return;
+        }
+        if (draftSignature(remote) === draftSignature(shipsRef.current)) {
+          return;
+        }
+        applyingRemoteRef.current = true;
+        setShips(remote);
+      }
+    );
+  }, [db, gameId, myTeam, locked]);
+
+  useEffect(() => {
+    if (!db || !gameId || !myTeam || locked || applyingRemoteRef.current) {
+      applyingRemoteRef.current = false;
+      return;
+    }
+    if (ships.length === 0 || dragRef.current) {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void saveDraftFleet(db, gameId, myTeam, ships).catch(() => undefined);
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [db, gameId, myTeam, ships, locked]);
 
   useEffect(() => {
     if (!drag) {
@@ -412,14 +457,14 @@ export function PlacementWorkspace({
   }
 
   async function handleLock() {
-    if (!fleetReady || locked) {
+    if (!fleetReady || locked || (gameId && !canLock) || !uid) {
       return;
     }
     setLockState("locking");
     setErrorMessage(null);
     try {
       if (db && gameId && myTeam) {
-        await lockPlacement(db, gameId, myTeam, ships);
+        await lockPlacement(db, gameId, myTeam, ships, uid);
       }
       setLockState("locked");
       setStatusMessage(
@@ -442,13 +487,12 @@ export function PlacementWorkspace({
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8">
         <header className="space-y-3 rounded-3xl border border-white/5 bg-white/5 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
           <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
-            Placement · Sprint 3
+            Placement
           </p>
           <h1 className="text-3xl font-semibold">Place your fleet</h1>
           <p className="max-w-2xl text-white/70">
-            Drag ships onto the grid, press R or Rotate for a 90° snap, then lock
-            when all five vessels are legal. Quick Play pairs two clients into one
-            match document.
+            Crew can drag and rotate together. Only the team captain locks the
+            fleet when all five vessels are legal.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link href="/" className="inline-flex text-sm font-semibold text-cyan-100">
@@ -568,14 +612,22 @@ export function PlacementWorkspace({
               type="button"
               data-testid="lock-placement"
               onClick={() => void handleLock()}
-              disabled={!fleetReady || locked || lockState === "locking" || (!!gameId && !myTeam)}
+              disabled={
+                !fleetReady ||
+                locked ||
+                lockState === "locking" ||
+                (!!gameId && !myTeam) ||
+                (!!gameId && !canLock)
+              }
               className="w-full rounded-full bg-[#00CED1] px-5 py-3 text-sm font-semibold text-[#041218] transition hover:brightness-110 active:scale-90 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40 disabled:hover:brightness-100"
             >
               {lockState === "locking"
                 ? "Locking…"
                 : locked
                   ? "Placement locked"
-                  : "Lock Placement"}
+                  : gameId && !canLock
+                    ? "Waiting for captain"
+                    : "Lock Placement"}
             </button>
 
             {bothLocked && (

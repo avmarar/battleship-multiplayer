@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { ResumeMatchCard } from "@/components/hub/ResumeMatchCard";
 
-const modes = [
+const inviteModes = [
   {
-    title: "1v1",
+    title: "Invite · 1v1",
     description:
       "Host a duel. Share one match code — your opponent joins as Beta captain with no approval.",
     href: "/lobby?mode=1v1",
     testId: "start-1v1",
   },
   {
-    title: "Multiplayer",
+    title: "Invite · Multiplayer",
     description:
       "Team captains seat via match code, then each recruits crew with their own invite.",
     href: "/lobby?mode=MULTIPLAYER",
@@ -21,24 +21,18 @@ const modes = [
 const sections = [
   {
     title: "Placement",
-    description:
-      "Drag, rotate, and lock a legal fleet after a match starts.",
+    description: "Drag, rotate, and lock a legal fleet after a match starts.",
     href: "/placement",
-    badge: "Sprint 3+",
   },
   {
     title: "Game",
-    description:
-      "Battle loop covering turn order, firing, and fleet destruction.",
+    description: "Battle loop covering turn order, firing, and fleet destruction.",
     href: "/game",
-    badge: "Sprint 5",
   },
   {
     title: "Scoreboard",
-    description:
-      "Post-match summaries plus authenticated W/L standings.",
+    description: "Post-match summaries plus authenticated W/L standings.",
     href: "/scoreboard",
-    badge: "Sprint 6",
   },
 ];
 
@@ -46,21 +40,28 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-12">
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 text-white">
-        <header className="space-y-4 rounded-3xl border border-white/5 bg-white/5 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.45)] backdrop-blur">
+        <header className="space-y-6 rounded-3xl border border-white/5 bg-white/5 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.45)] backdrop-blur">
           <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-1 text-sm text-white/80">
             Battleship Multiplayer
           </p>
           <div className="space-y-3">
             <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
-              Choose your engagement
+              Launch a match
             </h1>
             <p className="max-w-3xl text-base text-white/70">
-              Host creates the match and shares a lobby code. The peer becomes
-              Beta captain immediately. Multiplayer adds per-team crew invites.
+              Quick Play pairs you instantly. Invite friends with a lobby code
+              when you want a hosted 1v1 or a crew match.
             </p>
           </div>
+          <Link
+            href="/placement?quickPlay=1"
+            data-testid="hub-quick-play"
+            className="inline-flex w-full items-center justify-center rounded-full bg-[#00CED1] px-6 py-4 text-base font-semibold text-[#041218] transition hover:brightness-110 sm:w-auto"
+          >
+            Quick Play
+          </Link>
           <div className="grid gap-4 sm:grid-cols-2">
-            {modes.map((mode) => (
+            {inviteModes.map((mode) => (
               <Link
                 key={mode.href}
                 href={mode.href}
@@ -75,13 +76,6 @@ export default function Home() {
               </Link>
             ))}
           </div>
-          <Link
-            href="/placement?quickPlay=1"
-            data-testid="hub-quick-play"
-            className="inline-flex rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white transition hover:border-white/40"
-          >
-            Quick Play (dev)
-          </Link>
           <ResumeMatchCard />
         </header>
 
@@ -94,9 +88,6 @@ export default function Home() {
                 aria-label={`Open ${section.title} workspace`}
                 className="group rounded-3xl border border-white/5 bg-white/2 p-6 transition hover:border-cyan-400/50"
               >
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-cyan-100">
-                  {section.badge}
-                </div>
                 <h2 className="text-xl font-semibold text-white group-hover:text-cyan-100">
                   {section.title}
                 </h2>

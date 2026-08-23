@@ -24,6 +24,16 @@ export function MatchSummaryCard({
       <p className="text-sm text-white/70">
         You fought on Team {summary.myTeam}.
       </p>
+      {summary.ranked === true && (
+        <p className="text-sm text-emerald-200" data-testid="summary-ranked">
+          Ranked match — W/L recorded for registered commanders.
+        </p>
+      )}
+      {summary.ranked === false && (
+        <p className="text-sm text-amber-200" data-testid="summary-unranked">
+          Unranked — a guest played, so this session is not on the leaderboard.
+        </p>
+      )}
       <dl className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
           <dt className="text-xs uppercase tracking-[0.2em] text-white/50">

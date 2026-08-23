@@ -23,8 +23,10 @@ export type GameDocument = {
   turnOrder?: string[];
   currentTurnIndex?: number;
   winnerTeam?: GameTeamId;
-  /** Set once when W/L has been written to `leaderboard/{uid}`. */
+  /** Set once when W/L recording has been attempted. */
   statsRecorded?: boolean;
+  /** True only when every participant was a registered account (FR 4.2 / 4.3). */
+  statsRanked?: boolean;
 };
 
 export type GameTeamDocument = {

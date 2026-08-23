@@ -12,6 +12,7 @@ import {
   getFirestoreDb,
   isFirebaseReady,
 } from "./client";
+import { ensurePlayerProfile } from "@/lib/profile/ensureProfile";
 import { isEmailAccount } from "./account";
 
 export type AnonymousAuthState =
@@ -96,6 +97,17 @@ export function useAnonymousAuth() {
 
     return subscribeToAnonymousAuth(auth, setState);
   }, [auth]);
+
+  useEffect(() => {
+    if (!db || state.status !== "connected") {
+      return;
+    }
+    void ensurePlayerProfile(
+      db,
+      state.uid,
+      state.isAnonymous ? "guest" : "registered"
+    ).catch(() => undefined);
+  }, [db, state]);
 
   return {
     ...state,

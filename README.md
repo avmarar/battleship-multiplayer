@@ -97,7 +97,7 @@ The app still signs in anonymously on launch so Quick Play and e2e keep working.
 
 ## Guest session cleanup (RES-2)
 
-`sweepStaleGuestSessions` deletes guest `profile` + `presence` whose `lastSeenAt` is older than 7 days. It never deletes `leaderboard` or `accountType: registered` rows. Run it from an admin/emulator context (security rules only allow a user to delete their own presence). Production schedule still needs Cloud Functions on Blaze.
+`sweepStaleGuestSessions` deletes stale guest `profile`, `presence`, and leftover `leaderboard` rows. Registered accounts are left alone. W/L is only written when every player in the match is registered. Run the sweeper from an admin/emulator context (security rules only allow a user to delete their own presence). Production schedule still needs Cloud Functions on Blaze.
 
 ## Soft load smoke (NFR-LOAD)
 

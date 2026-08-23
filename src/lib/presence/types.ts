@@ -1,4 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
+import type { AccountType } from "@/lib/profile/accountType";
 
 export type PresenceDocument = {
   uid: string;
@@ -6,6 +7,7 @@ export type PresenceDocument = {
   lastSeenAt: Timestamp;
   gameId?: string | null;
   matchId?: string | null;
+  accountType?: AccountType;
 };
 
 export const PRESENCE_COLLECTION = "presence";

@@ -9,6 +9,7 @@ import {
   where,
   type Firestore,
 } from "firebase/firestore";
+import { LEADERBOARD_COLLECTION } from "@/lib/leaderboard/types";
 import { PRESENCE_COLLECTION } from "@/lib/presence/types";
 import { profileDocSegments } from "@/lib/profile/paths";
 
@@ -17,6 +18,7 @@ export const GUEST_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export type SweepResult = {
   deletedProfiles: number;
   deletedPresence: number;
+  deletedLeaderboard: number;
   skippedRegistered: number;
 };
 
@@ -41,6 +43,7 @@ export async function sweepStaleGuestSessions(
   const result: SweepResult = {
     deletedProfiles: 0,
     deletedPresence: 0,
+    deletedLeaderboard: 0,
     skippedRegistered: 0,
   };
 
@@ -59,6 +62,13 @@ export async function sweepStaleGuestSessions(
     if (profileSnap.exists()) {
       await deleteDoc(profileRef);
       result.deletedProfiles += 1;
+    }
+
+    const leaderboardRef = doc(db, LEADERBOARD_COLLECTION, uid);
+    const leaderboardSnap = await getDoc(leaderboardRef);
+    if (leaderboardSnap.exists()) {
+      await deleteDoc(leaderboardRef);
+      result.deletedLeaderboard += 1;
     }
 
     await deleteDoc(presenceSnap.ref);

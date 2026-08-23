@@ -54,7 +54,7 @@ export function ProfileFormCard({
             data-testid="profile-nickname"
             value={nickname}
             onChange={(event) => onNicknameChange(event.target.value)}
-            placeholder="e.g. Captain Aurora"
+            placeholder="Guest name is assigned automatically"
             className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
           />
         </label>

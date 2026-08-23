@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { matchIsRanked } from "@/lib/leaderboard/eligibility";
 import {
   fallbackNickname,
   nextStats,
@@ -45,6 +46,18 @@ describe("leaderboard stats (LB-2 / LB-3)", () => {
   it("falls back to a short commander name", () => {
     expect(fallbackNickname("abcd1234")).toBe("Commander ABCD");
   });
+
+  it("ranks a match only when every member is registered", () => {
+    expect(
+      matchIsRanked([{ accountType: "registered" }, { accountType: "registered" }])
+    ).toBe(true);
+    expect(
+      matchIsRanked([{ accountType: "registered" }, { accountType: "guest" }])
+    ).toBe(false);
+    expect(matchIsRanked([{ accountType: "registered" }, undefined])).toBe(
+      false
+    );
+  });
 });
 
 describe("match summary (LB-1)", () => {
@@ -71,6 +84,7 @@ describe("match summary (LB-1)", () => {
       shotsFired: 2,
       shipsSunk: 1,
       shipsLost: 0,
+      ranked: null,
     });
   });
 });

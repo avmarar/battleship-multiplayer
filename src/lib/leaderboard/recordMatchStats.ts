@@ -5,11 +5,16 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { GAMES_COLLECTION, type GameDocument } from "@/lib/games/types";
+import { PRESENCE_COLLECTION } from "@/lib/presence/types";
+import { matchIsRanked } from "./eligibility";
 import { nextStats } from "./stats";
 import { LEADERBOARD_COLLECTION, type LeaderboardEntry } from "./types";
 
 export type RecordMatchStatsResult =
-  | { recorded: false; reason: "not-ended" | "already-recorded" }
+  | {
+      recorded: false;
+      reason: "not-ended" | "already-recorded" | "unranked-guests";
+    }
   | { recorded: true };
 
 export async function recordMatchStats(
@@ -39,11 +44,28 @@ export async function recordMatchStats(
     const refs = game.memberIds.map((uid) =>
       doc(db, LEADERBOARD_COLLECTION, uid)
     );
-    const snapshots = await Promise.all(
-      refs.map((ref) => transaction.get(ref))
+    const [presenceSnaps, snapshots] = await Promise.all([
+      Promise.all(
+        game.memberIds.map((uid) =>
+          transaction.get(doc(db, PRESENCE_COLLECTION, uid))
+        )
+      ),
+      Promise.all(refs.map((ref) => transaction.get(ref))),
+    ]);
+    const ranked = matchIsRanked(
+      presenceSnaps.map(
+        (snapshot) => snapshot.data() as { accountType?: string } | undefined
+      )
     );
 
-    transaction.update(gameRef, { statsRecorded: true });
+    transaction.update(gameRef, {
+      statsRecorded: true,
+      statsRanked: ranked,
+    });
+
+    if (!ranked) {
+      return { recorded: false, reason: "unranked-guests" } as const;
+    }
 
     snapshots.forEach((snapshot, index) => {
       const uid = game.memberIds[index];

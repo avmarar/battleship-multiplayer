@@ -16,6 +16,7 @@ import { Timestamp } from "firebase/firestore";
 import { fireShot } from "@/lib/games/fireShot";
 import { recordMatchStats } from "@/lib/leaderboard/recordMatchStats";
 import { toLockedPayload } from "@/lib/grid/placement";
+import { PRESENCE_COLLECTION } from "@/lib/presence/types";
 import { completeHorizontalFleet } from "../helpers/fleet";
 
 const RULES_PATH = path.resolve(__dirname, "../../firestore.rules");
@@ -43,6 +44,7 @@ describe("match stats recording (LB-2)", () => {
 
   it("increments W/L once when a match is already ended", async () => {
     await seedEndedGame(testEnv);
+    await seedRegisteredPresence(testEnv, ["alpha-uid", "beta-uid"]);
     const alpha = testEnv.authenticatedContext("alpha-uid").firestore();
 
     const first = await recordMatchStats(alpha, GAME_ID, "alpha-uid");
@@ -56,8 +58,27 @@ describe("match stats recording (LB-2)", () => {
     expect(rows["beta-uid"]).toMatchObject({ wins: 0, losses: 1 });
   });
 
+  it("skips the leaderboard when any participant is a guest", async () => {
+    await seedEndedGame(testEnv);
+    await seedRegisteredPresence(testEnv, ["alpha-uid"]);
+
+    const first = await recordMatchStats(
+      testEnv.authenticatedContext("alpha-uid").firestore(),
+      GAME_ID,
+      "alpha-uid"
+    );
+    expect(first).toEqual({ recorded: false, reason: "unranked-guests" });
+
+    const rows = await readLeaderboard(testEnv);
+    expect(rows).toEqual({});
+    const game = await readGame(testEnv);
+    expect(game.statsRecorded).toBe(true);
+    expect(game.statsRanked).toBe(false);
+  });
+
   it("records stats from the finishing shot", async () => {
     await seedAlmostOverBattle(testEnv);
+    await seedRegisteredPresence(testEnv, ["alpha-uid", "beta-uid"]);
     const alpha = testEnv.authenticatedContext("alpha-uid").firestore();
     const result = await fireShot(alpha, GAME_ID, "alpha-uid", "B5");
     expect(result.ended).toBe(true);
@@ -67,6 +88,38 @@ describe("match stats recording (LB-2)", () => {
     expect(rows["beta-uid"].losses).toBe(1);
   });
 });
+
+async function seedRegisteredPresence(
+  testEnv: RulesTestEnvironment,
+  uids: string[]
+) {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
+    await Promise.all(
+      uids.map((uid) =>
+        firestore.doc(`${PRESENCE_COLLECTION}/${uid}`).set({
+          uid,
+          isConnected: true,
+          lastSeenAt: Timestamp.now(),
+          accountType: "registered",
+        })
+      )
+    );
+  });
+}
+
+async function readGame(testEnv: RulesTestEnvironment) {
+  let data: { statsRecorded?: boolean; statsRanked?: boolean } | undefined;
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    data = (
+      await context.firestore().doc(`games/${GAME_ID}`).get()
+    ).data() as typeof data;
+  });
+  if (!data) {
+    throw new Error("Game was not found.");
+  }
+  return data;
+}
 
 async function seedEndedGame(testEnv: RulesTestEnvironment) {
   await testEnv.withSecurityRulesDisabled(async (context) => {

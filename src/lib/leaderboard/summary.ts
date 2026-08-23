@@ -7,6 +7,7 @@ export type MatchSummary = {
   shotsFired: number;
   shipsSunk: number;
   shipsLost: number;
+  ranked: boolean | null;
 };
 
 export function countSunk(ships: GameTeamDocument["ships"] | undefined) {
@@ -29,5 +30,6 @@ export function buildMatchSummary(
     shotsFired: myTeam?.shotsFired.length ?? 0,
     shipsSunk: countSunk(enemyTeam?.ships),
     shipsLost: countSunk(myTeam?.ships),
+    ranked: game.statsRecorded ? game.statsRanked === true : null,
   };
 }

@@ -25,6 +25,7 @@ import { subscribeToAnonymousAuth } from "@/lib/firebase/useAnonymousAuth";
 import { startMatchGame } from "@/lib/games/startMatchGame";
 import { isEmailAccount } from "@/lib/firebase/account";
 import { upsertLeaderboardNickname } from "@/lib/leaderboard/upsertNickname";
+import { guestNickname } from "@/lib/profile/nickname";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { handoverMatchCaptain, electLongestTenured } from "@/lib/matches/handover";
 import { canHandoverCaptain } from "@/lib/presence/stale";
@@ -184,6 +185,9 @@ export function LobbyPageClient() {
     uid: connectedUid,
     matchId: activeMatch?.id ?? null,
     gameId: activeMatch?.gameId ?? null,
+    accountType: isEmailAccount(firebaseAuth?.currentUser ?? null)
+      ? "registered"
+      : "guest",
   });
 
   useEffect(() => {
@@ -213,17 +217,13 @@ export function LobbyPageClient() {
         if (snapshot.exists()) {
           const data = snapshot.data() as ProfileDocument;
           setProfile(data);
-          if (!hydrateFormRef.current) {
-            setNicknameInput(data.nickname ?? "");
+          if (!hydrateFormRef.current && data.nickname) {
+            setNicknameInput(data.nickname);
             setStatusInput(data.statusMessage ?? defaultStatusMessage);
             hydrateFormRef.current = true;
           }
         } else {
           setProfile(null);
-          if (!hydrateFormRef.current) {
-            setNicknameInput("");
-            setStatusInput(defaultStatusMessage);
-          }
         }
       },
       (error) => setProfileError(error.message)
@@ -481,7 +481,7 @@ export function LobbyPageClient() {
     firebaseAvailable && authState.status === "connected";
 
   const nicknameForActions =
-    visibleProfile?.nickname || nicknameInput.trim() || "Fleet Member";
+    visibleProfile?.nickname || nicknameInput.trim() || guestNickname(connectedUid ?? "user");
 
   const handleCreateMatch = async () => {
     const uid = connectedUid;
@@ -914,9 +914,11 @@ export function LobbyPageClient() {
         }).catch(() => undefined);
       }
 
-      await upsertLeaderboardNickname(db, connectedUid, trimmedNickname).catch(
-        () => undefined
-      );
+      if (isEmailAccount(authInstance?.currentUser ?? null)) {
+        await upsertLeaderboardNickname(db, connectedUid, trimmedNickname).catch(
+          () => undefined
+        );
+      }
 
       setSaveState("success");
       setLastSavedAt(new Date());

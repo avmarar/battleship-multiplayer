@@ -1,5 +1,4 @@
 import type { FormEvent } from "react";
-import { LOBBY_TEAM_OPTIONS } from "@/lib/lobbies/types";
 import type { JoinRequestWithPath } from "../types";
 
 type JoinAndCreateColumnProps = {
@@ -9,8 +8,6 @@ type JoinAndCreateColumnProps = {
   onCreateLobby: () => void;
   joinCodeInput: string;
   onJoinCodeChange: (value: string) => void;
-  joinTeam: (typeof LOBBY_TEAM_OPTIONS)[number];
-  onJoinTeamChange: (team: (typeof LOBBY_TEAM_OPTIONS)[number]) => void;
   joinFlowState: "idle" | "submitting";
   joinFlowMessage: string | null;
   joinFlowError: string | null;
@@ -27,8 +24,6 @@ export function JoinAndCreateColumn({
   onCreateLobby,
   joinCodeInput,
   onJoinCodeChange,
-  joinTeam,
-  onJoinTeamChange,
   joinFlowState,
   joinFlowMessage,
   joinFlowError,
@@ -45,7 +40,8 @@ export function JoinAndCreateColumn({
         </p>
         <h3 className="text-2xl font-semibold text-white">Create a new lobby</h3>
         <p className="text-sm text-white/70">
-          Auto-generates a secure invite code and assigns you as the captain.
+          Generates an Alpha invite and a Beta invite. Share the code for the
+          team you want them on.
         </p>
         <button
           type="button"
@@ -70,6 +66,9 @@ export function JoinAndCreateColumn({
             Join by Code
           </p>
           <h3 className="text-2xl font-semibold text-white">Enter invite code</h3>
+          <p className="mt-1 text-sm text-white/70">
+            The captain assigned this code to a team. You do not pick a side.
+          </p>
         </div>
         <label className="flex flex-col gap-2 text-sm text-white/70">
           Invite Code
@@ -85,31 +84,6 @@ export function JoinAndCreateColumn({
             disabled={joinFlowState === "submitting" || !canJoinLobby}
           />
         </label>
-        <fieldset className="border-0 p-0">
-          <legend className="text-sm text-white/80">Preferred Team</legend>
-          <div className="mt-2 flex gap-3">
-            {LOBBY_TEAM_OPTIONS.map((team) => (
-              <label
-                key={team}
-                className={`cursor-pointer rounded-full border px-4 py-2 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#00CED1] ${
-                  joinTeam === team
-                    ? "border-cyan-400 text-white"
-                    : "border-white/20 text-white/80"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="team"
-                  value={team}
-                  className="sr-only"
-                  checked={joinTeam === team}
-                  onChange={() => onJoinTeamChange(team)}
-                />
-                {team}
-              </label>
-            ))}
-          </div>
-        </fieldset>
         <button
           type="submit"
           data-testid="join-lobby"
@@ -150,7 +124,7 @@ export function JoinAndCreateColumn({
             </span>
           </p>
           <p className="text-white/60">
-            Preferred Team: {pendingJoinRequest.requestedTeam}
+            Assigned Team: {pendingJoinRequest.requestedTeam}
           </p>
           {pendingJoinRequest.status === "PENDING" && (
             <button

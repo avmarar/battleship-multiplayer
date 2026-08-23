@@ -14,6 +14,7 @@ const RULES_PATH = path.resolve(__dirname, "../../firestore.rules");
 function lobbyFixture(overrides = {}) {
   return {
     inviteCode: "ABC123",
+    inviteCodeBeta: "BETA99",
     captainId: "captain-uid",
     status: "LOBBY",
     memberIds: ["captain-uid"],
@@ -39,7 +40,7 @@ function joinRequestFixture(overrides = {}) {
     createdAt: Timestamp.fromDate(new Date("2024-01-01T00:01:00Z")),
     status: "PENDING",
     nickname: "New Player",
-    inviteCode: "INVITE",
+    inviteCode: "ABC123",
     ...overrides,
   };
 }
@@ -62,7 +63,9 @@ async function run() {
     await shouldBlockUnauthenticatedLobbyReads(testEnv);
     await shouldEnforceCaptainOnlyLobbyUpdates(testEnv);
     await shouldEnforceJoinRequestOwnershipRules(testEnv);
-  await shouldBlockJoinRequestsWhenLocked(testEnv);
+    await shouldBlockJoinRequestsWhenLocked(testEnv);
+    await shouldAllowMembersToToggleOwnReady(testEnv);
+    await shouldBindJoinRequestsToTeamInviteCodes(testEnv);
   await shouldProtectMatchmakingAndPlacement(testEnv);
   console.log("Firestore security rules tests passed");
   } finally {
@@ -198,6 +201,130 @@ async function shouldBlockJoinRequestsWhenLocked(testEnv) {
       .firestore()
       .doc("lobbies/lobby-alpha/joinRequests/requester-uid")
       .set(joinRequestFixture())
+  );
+}
+
+async function shouldBindJoinRequestsToTeamInviteCodes(testEnv) {
+  await testEnv.clearFirestore();
+  await seedLobby(testEnv, "lobby-alpha", lobbyFixture());
+
+  const captain = testEnv.authenticatedContext("captain-uid");
+  const alphaJoiner = testEnv.authenticatedContext("alpha-joiner");
+  const betaJoiner = testEnv.authenticatedContext("beta-joiner");
+
+  const missingBetaCode = lobbyFixture({
+    inviteCode: "NEW111",
+    captainId: "captain-uid",
+  });
+  delete missingBetaCode.inviteCodeBeta;
+
+  await assertFails(captain.firestore().collection("lobbies").add(missingBetaCode));
+
+  await assertSucceeds(
+    captain.firestore().collection("lobbies").add(
+      lobbyFixture({
+        inviteCode: "NEW111",
+        inviteCodeBeta: "NEW222",
+        captainId: "captain-uid",
+      })
+    )
+  );
+
+  await assertFails(
+    captain.firestore().doc("lobbies/lobby-alpha").update({
+      inviteCodeBeta: "XXXXXX",
+    })
+  );
+
+  await assertFails(
+    alphaJoiner
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/alpha-joiner")
+      .set(
+        joinRequestFixture({
+          userId: "alpha-joiner",
+          requestedTeam: "BETA",
+          inviteCode: "ABC123",
+        })
+      )
+  );
+
+  await assertSucceeds(
+    alphaJoiner
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/alpha-joiner")
+      .set(
+        joinRequestFixture({
+          userId: "alpha-joiner",
+          requestedTeam: "ALPHA",
+          inviteCode: "ABC123",
+        })
+      )
+  );
+
+  await assertSucceeds(
+    betaJoiner
+      .firestore()
+      .doc("lobbies/lobby-alpha/joinRequests/beta-joiner")
+      .set(
+        joinRequestFixture({
+          userId: "beta-joiner",
+          requestedTeam: "BETA",
+          inviteCode: "BETA99",
+        })
+      )
+  );
+}
+
+async function shouldAllowMembersToToggleOwnReady(testEnv) {
+  await testEnv.clearFirestore();
+  await seedLobby(
+    testEnv,
+    "lobby-alpha",
+    lobbyFixture({
+      memberIds: ["captain-uid", "member-uid"],
+      members: {
+        "captain-uid": {
+          userId: "captain-uid",
+          nickname: "Captain",
+          role: "CAPTAIN",
+          isReady: false,
+        },
+        "member-uid": {
+          userId: "member-uid",
+          nickname: "Crew",
+          role: "CREW",
+          isReady: false,
+        },
+      },
+    })
+  );
+
+  const member = testEnv.authenticatedContext("member-uid");
+  const outsider = testEnv.authenticatedContext("outsider-uid");
+
+  await assertSucceeds(
+    member.firestore().doc("lobbies/lobby-alpha").update({
+      "members.member-uid.isReady": true,
+    })
+  );
+
+  await assertFails(
+    member.firestore().doc("lobbies/lobby-alpha").update({
+      "members.captain-uid.isReady": true,
+    })
+  );
+
+  await assertFails(
+    member.firestore().doc("lobbies/lobby-alpha").update({
+      status: "PLACEMENT",
+    })
+  );
+
+  await assertFails(
+    outsider.firestore().doc("lobbies/lobby-alpha").update({
+      "members.member-uid.isReady": false,
+    })
   );
 }
 

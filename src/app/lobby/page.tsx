@@ -12,7 +12,6 @@ import {
   collectionGroup,
   deleteDoc,
   doc,
-  getDocs,
   limit,
   onSnapshot,
   query,
@@ -28,14 +27,16 @@ import {
   getFirestoreDb,
   isFirebaseReady,
 } from "@/lib/firebase/client";
+import { allMembersReady } from "@/lib/lobbies/ready";
 import {
   DEFAULT_MAX_MEMBERS,
-  LOBBY_TEAM_OPTIONS,
   type LobbyDocument,
   type LobbyJoinRequest,
+  type LobbyTeamId,
 } from "@/lib/lobbies/types";
 import {
-  generateUniqueInviteCode,
+  findLobbyByInviteCode,
+  generateUniqueInviteCodes,
   normalizeInviteCode,
 } from "@/lib/lobbies/utils";
 import {
@@ -95,9 +96,6 @@ export default function Home() {
     JoinRequestWithPath[]
   >([]);
   const [joinCodeInput, setJoinCodeInput] = useState("");
-  const [joinTeam, setJoinTeam] = useState<(typeof LOBBY_TEAM_OPTIONS)[number]>(
-    LOBBY_TEAM_OPTIONS[0]
-  );
   const [joinFlowState, setJoinFlowState] = useState<"idle" | "submitting">(
     "idle"
   );
@@ -360,9 +358,10 @@ export default function Home() {
     setLobbyActionError(null);
 
     try {
-      const code = await generateUniqueInviteCode(firestoreDb);
+      const { alpha, beta } = await generateUniqueInviteCodes(firestoreDb);
       await addDoc(collection(firestoreDb, "lobbies"), {
-        inviteCode: code,
+        inviteCode: alpha,
+        inviteCodeBeta: beta,
         captainId: uid,
         status: "LOBBY",
         isLocked: false,
@@ -374,11 +373,15 @@ export default function Home() {
             userId: uid,
             nickname,
             role: "CAPTAIN",
+            team: "ALPHA",
+            isReady: false,
             joinedAt: serverTimestamp(),
           },
         },
       });
-      setLobbyActionMessage(`Lobby created. Invite code ${code}`);
+      setLobbyActionMessage(
+        `Lobby created. Share ALPHA ${alpha} or BETA ${beta}.`
+      );
     } catch (error) {
       const message =
         error instanceof Error
@@ -419,20 +422,12 @@ export default function Home() {
     setJoinFlowMessage(null);
 
     try {
-      const result = await getDocs(
-        query(
-          collection(firestoreDb, "lobbies"),
-          where("inviteCode", "==", cleanedCode),
-          limit(1)
-        )
-      );
-
-      if (result.empty) {
+      const match = await findLobbyByInviteCode(firestoreDb, cleanedCode);
+      if (!match) {
         throw new Error("Lobby not found. Check the invite code.");
       }
 
-      const docSnapshot = result.docs[0];
-      const lobbyData = docSnapshot.data() as LobbyDocument;
+      const { id: lobbyId, data: lobbyData, team } = match;
 
       if (lobbyData.memberIds?.includes(uid)) {
         setJoinFlowMessage("You are already a member of this lobby.");
@@ -453,17 +448,17 @@ export default function Home() {
       const joinRequestRef = doc(
         firestoreDb,
         "lobbies",
-        docSnapshot.id,
+        lobbyId,
         "joinRequests",
         uid
       );
 
       await setDoc(joinRequestRef, {
-        lobbyId: docSnapshot.id,
-        requestedTeam: joinTeam,
+        lobbyId,
+        requestedTeam: team,
         createdAt: serverTimestamp(),
         status: "PENDING",
-        inviteCode: lobbyData.inviteCode,
+        inviteCode: cleanedCode,
         nickname: visibleProfile?.nickname || nicknameInput.trim() || "Crew",
         userId: uid,
       });
@@ -496,6 +491,55 @@ export default function Home() {
           ? error.message
           : "Failed to cancel join request.";
       setJoinFlowError(message);
+    }
+  };
+
+  const handleToggleReady = async () => {
+    if (!firestoreDb || !activeLobby || !connectedUid) {
+      return;
+    }
+
+    const currentMember = activeLobby.members?.[connectedUid];
+    if (!currentMember || activeLobby.status !== "LOBBY") {
+      return;
+    }
+
+    setLobbyActionError(null);
+    try {
+      await updateDoc(doc(firestoreDb, "lobbies", activeLobby.id), {
+        [`members.${connectedUid}.isReady`]: !currentMember.isReady,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to update ready state.";
+      setLobbyActionError(message);
+    }
+  };
+
+  const handleStartPlacement = async () => {
+    if (!firestoreDb || !activeLobby || !isLobbyCaptain) {
+      return;
+    }
+
+    if (!allMembersReady(lobbyMembers)) {
+      setLobbyActionError("All members must be ready before starting placement.");
+      return;
+    }
+
+    setLobbyActionError(null);
+    try {
+      await updateDoc(doc(firestoreDb, "lobbies", activeLobby.id), {
+        status: "PLACEMENT",
+      });
+      setLobbyActionMessage("Lobby advanced to placement.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to start placement.";
+      setLobbyActionError(message);
     }
   };
 
@@ -558,6 +602,8 @@ export default function Home() {
             userId: request.userId,
             nickname: request.nickname,
             role: "CREW",
+            team: request.requestedTeam,
+            isReady: false,
             joinedAt: serverTimestamp(),
           },
         });
@@ -631,14 +677,16 @@ export default function Home() {
     }
   };
 
-  const handleCopyInviteCode = async () => {
-    if (!activeLobby?.inviteCode) {
+  const handleCopyInviteCode = async (team: LobbyTeamId) => {
+    const code =
+      team === "BETA" ? activeLobby?.inviteCodeBeta : activeLobby?.inviteCode;
+    if (!code) {
       return;
     }
 
     try {
-      await navigator.clipboard?.writeText(activeLobby.inviteCode);
-      setLobbyActionMessage("Invite code copied to clipboard.");
+      await navigator.clipboard?.writeText(code);
+      setLobbyActionMessage(`${team} invite copied to clipboard.`);
       setLobbyActionError(null);
     } catch {
       setLobbyActionError("Unable to copy invite code.");
@@ -716,8 +764,8 @@ export default function Home() {
         <header className="space-y-2">
           <h1 className="text-3xl font-semibold text-white">Lobby</h1>
           <p className="text-sm text-white/80">
-            Create a squad or join with an invite code. Captains approve requests
-            and can lock the team.
+            Captains share an Alpha or Beta invite. The code assigns the joiner
+            to that team.
           </p>
         </header>
         <section className="grid gap-6 lg:grid-cols-2">
@@ -732,6 +780,8 @@ export default function Home() {
             onCopyInviteCode={handleCopyInviteCode}
             onApproveJoinRequest={handleApproveJoinRequest}
             onRejectJoinRequest={handleRejectJoinRequest}
+            onToggleReady={handleToggleReady}
+            onStartPlacement={handleStartPlacement}
             onToggleLobbyLock={handleToggleLobbyLock}
             onDisbandLobby={handleDisbandLobby}
           />
@@ -743,8 +793,6 @@ export default function Home() {
             onCreateLobby={handleCreateLobby}
             joinCodeInput={joinCodeInput}
             onJoinCodeChange={setJoinCodeInput}
-            joinTeam={joinTeam}
-            onJoinTeamChange={setJoinTeam}
             joinFlowState={joinFlowState}
             joinFlowMessage={joinFlowMessage}
             joinFlowError={joinFlowError}

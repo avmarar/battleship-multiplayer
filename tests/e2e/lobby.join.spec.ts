@@ -19,11 +19,18 @@ test.describe("QA-1.2 lobby create and join", () => {
       await waitForAnonymousAuth(captain);
       await captain.getByTestId("create-lobby").click();
       await expect(captain.getByTestId("invite-code")).toHaveText(/^[A-Z0-9]{6}$/);
+      await expect(captain.getByTestId("invite-code-beta")).toHaveText(
+        /^[A-Z0-9]{6}$/
+      );
       await expect(captain.getByTestId("lobby-member-count")).toHaveText(
         "Members 1/8"
       );
 
       const inviteCode = (await captain.getByTestId("invite-code").innerText()).trim();
+      const betaCode = (
+        await captain.getByTestId("invite-code-beta").innerText()
+      ).trim();
+      expect(inviteCode).not.toBe(betaCode);
 
       await crew.goto("/lobby");
       await waitForAnonymousAuth(crew);
@@ -45,6 +52,15 @@ test.describe("QA-1.2 lobby create and join", () => {
         "Members 2/8"
       );
       await expect(crew.getByTestId("join-request-status")).toHaveText("APPROVED");
+
+      await expect(captain.getByTestId("start-placement")).toBeDisabled();
+      await captain.getByTestId("toggle-ready").click();
+      await crew.getByTestId("toggle-ready").click();
+      await expect(captain.getByTestId("ready-count")).toHaveText("Ready 2/2");
+      await expect(captain.getByTestId("start-placement")).toBeEnabled();
+      await captain.getByTestId("start-placement").click();
+      await expect(captain.getByTestId("lobby-status")).toHaveText("PLACEMENT");
+      await expect(crew.getByTestId("lobby-status")).toHaveText("PLACEMENT");
     } finally {
       await captainContext.close();
       await crewContext.close();

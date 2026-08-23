@@ -4,15 +4,20 @@ export type LobbyStatus = "LOBBY" | "PLACEMENT" | "BATTLE" | "ENDED";
 
 export type LobbyMemberRole = "CAPTAIN" | "CREW";
 
+export type LobbyTeamId = "ALPHA" | "BETA";
+
 export type LobbyMember = {
   userId: string;
   nickname: string;
   role: LobbyMemberRole;
+  team?: LobbyTeamId;
+  isReady?: boolean;
   joinedAt?: Timestamp;
 };
 
 export type LobbyDocument = {
   inviteCode: string;
+  inviteCodeBeta?: string;
   captainId: string;
   status: LobbyStatus;
   isLocked: boolean;
@@ -33,7 +38,7 @@ export type LobbyJoinRequest = {
   userId: string;
   nickname: string;
   inviteCode?: string;
-  requestedTeam: "ALPHA" | "BETA";
+  requestedTeam: LobbyTeamId;
   status: LobbyJoinRequestStatus;
   createdAt: Timestamp;
   decisionAt?: Timestamp;

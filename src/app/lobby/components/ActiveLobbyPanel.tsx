@@ -1,4 +1,9 @@
-import type { LobbyMember } from "@/lib/lobbies/types";
+import {
+  allMembersReady,
+  countReadyMembers,
+  isMemberReady,
+} from "@/lib/lobbies/ready";
+import type { LobbyMember, LobbyTeamId } from "@/lib/lobbies/types";
 import type { JoinRequestWithPath, LobbySnapshot } from "../types";
 
 type ActiveLobbyPanelProps = {
@@ -9,9 +14,11 @@ type ActiveLobbyPanelProps = {
   captainJoinRequests: JoinRequestWithPath[];
   lobbyActionMessage: string | null;
   lobbyActionError: string | null;
-  onCopyInviteCode: () => void;
+  onCopyInviteCode: (team: LobbyTeamId) => void;
   onApproveJoinRequest: (request: JoinRequestWithPath) => void;
   onRejectJoinRequest: (request: JoinRequestWithPath) => void;
+  onToggleReady: () => void;
+  onStartPlacement: () => void;
   onToggleLobbyLock: () => void;
   onDisbandLobby: () => void;
 };
@@ -27,9 +34,21 @@ export function ActiveLobbyPanel({
   onCopyInviteCode,
   onApproveJoinRequest,
   onRejectJoinRequest,
+  onToggleReady,
+  onStartPlacement,
   onToggleLobbyLock,
   onDisbandLobby,
 }: ActiveLobbyPanelProps) {
+  const readyTotals = countReadyMembers(lobbyMembers);
+  const canAdvanceToPlacement =
+    isLobbyCaptain &&
+    activeLobby?.status === "LOBBY" &&
+    allMembersReady(lobbyMembers);
+  const canToggleReady = activeLobby?.status === "LOBBY" && !!connectedUid;
+  const selfIsReady = lobbyMembers.some(
+    (member) => member.userId === connectedUid && isMemberReady(member)
+  );
+
   return (
     <div className="space-y-5 rounded-3xl border border-white/5 bg-[#050b1a]/80 p-6 shadow-xl shadow-black/30">
       <div className="flex items-center justify-between">
@@ -38,31 +57,57 @@ export function ActiveLobbyPanel({
             Active Lobby
           </p>
           <h2 className="text-2xl font-semibold text-white">
-            {activeLobby ? "Share your invite code" : "No lobby joined"}
+            {activeLobby ? "Share a team invite" : "No lobby joined"}
           </h2>
         </div>
-        {activeLobby && (
-          <button
-            type="button"
-            onClick={onCopyInviteCode}
-            className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40"
-          >
-            Copy Code
-          </button>
-        )}
       </div>
       {activeLobby ? (
         <>
-          <div className="flex flex-wrap gap-3 text-sm text-white/70">
-            <span className="rounded-full border border-white/10 px-3 py-1">
-              Invite:{" "}
-              <span
-                className="font-semibold text-white"
-                data-testid="invite-code"
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/4 px-4 py-3">
+              <div className="text-sm text-white/70">
+                <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">
+                  Alpha invite
+                </p>
+                <p
+                  className="font-mono text-lg font-semibold text-white"
+                  data-testid="invite-code"
+                >
+                  {activeLobby.inviteCode}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onCopyInviteCode("ALPHA")}
+                className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40"
               >
-                {activeLobby.inviteCode}
-              </span>
-            </span>
+                Copy Alpha
+              </button>
+            </div>
+            {activeLobby.inviteCodeBeta && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/4 px-4 py-3">
+                <div className="text-sm text-white/70">
+                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">
+                    Beta invite
+                  </p>
+                  <p
+                    className="font-mono text-lg font-semibold text-white"
+                    data-testid="invite-code-beta"
+                  >
+                    {activeLobby.inviteCodeBeta}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onCopyInviteCode("BETA")}
+                  className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40"
+                >
+                  Copy Beta
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm text-white/70">
             <span
               className="rounded-full border border-white/10 px-3 py-1"
               data-testid="lobby-member-count"
@@ -71,6 +116,18 @@ export function ActiveLobbyPanel({
             </span>
             <span className="rounded-full border border-white/10 px-3 py-1">
               {activeLobby.isLocked ? "Locked" : "Open"}
+            </span>
+            <span
+              className="rounded-full border border-white/10 px-3 py-1"
+              data-testid="ready-count"
+            >
+              Ready {readyTotals.ready}/{readyTotals.total}
+            </span>
+            <span
+              className="rounded-full border border-white/10 px-3 py-1"
+              data-testid="lobby-status"
+            >
+              {activeLobby.status}
             </span>
           </div>
           <div>
@@ -89,12 +146,33 @@ export function ActiveLobbyPanel({
                     </p>
                     <p className="text-xs text-white/60">
                       {member.role === "CAPTAIN" ? "Captain" : "Crew"}
+                      {member.team ? ` · ${member.team}` : ""}
                       {member.userId === connectedUid ? " · You" : ""}
                     </p>
                   </div>
-                  <span className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-wide text-white/70">
-                    {member.role}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs uppercase tracking-wide ${
+                        isMemberReady(member)
+                          ? "border border-emerald-400/50 text-emerald-200"
+                          : "border border-white/20 text-white/70"
+                      }`}
+                      data-testid={`member-ready-${member.userId}`}
+                    >
+                      {isMemberReady(member) ? "Ready" : "Not Ready"}
+                    </span>
+                    {member.team && (
+                      <span
+                        className="rounded-full border border-cyan-400/40 px-3 py-1 text-xs uppercase tracking-wide text-cyan-100"
+                        data-testid={`member-team-${member.userId}`}
+                      >
+                        {member.team}
+                      </span>
+                    )}
+                    <span className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-wide text-white/70">
+                      {member.role}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -158,6 +236,25 @@ export function ActiveLobbyPanel({
                 </div>
               )}
               <div className="flex flex-wrap gap-3">
+                {canToggleReady && (
+                  <button
+                    type="button"
+                    data-testid="toggle-ready"
+                    onClick={onToggleReady}
+                    className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
+                  >
+                    {selfIsReady ? "Set Not Ready" : "Set Ready"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid="start-placement"
+                  onClick={onStartPlacement}
+                  disabled={!canAdvanceToPlacement}
+                  className="rounded-full bg-linear-to-r from-cyan-400 to-emerald-400 px-5 py-2 text-sm font-semibold text-[#04101b] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Start Placement
+                </button>
                 <button
                   type="button"
                   onClick={onToggleLobbyLock}
@@ -175,10 +272,23 @@ export function ActiveLobbyPanel({
               </div>
             </div>
           ) : (
-            <p className="rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/80">
-              Waiting for the captain to advance the lobby. Share the code with
-              your squad.
-            </p>
+            <div className="space-y-3">
+              <p className="rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-white/80">
+                {activeLobby.status === "PLACEMENT"
+                  ? "The captain started placement. Ready states are locked."
+                  : "Mark ready when your squad is set. The captain can start placement once everyone is ready."}
+              </p>
+              {canToggleReady && (
+                <button
+                  type="button"
+                  data-testid="toggle-ready"
+                  onClick={onToggleReady}
+                  className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
+                >
+                  {selfIsReady ? "Set Not Ready" : "Set Ready"}
+                </button>
+              )}
+            </div>
           )}
         </>
       ) : (

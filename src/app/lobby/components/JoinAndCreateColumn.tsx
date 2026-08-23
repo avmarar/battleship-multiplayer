@@ -40,7 +40,7 @@ export function JoinAndCreateColumn({
   return (
     <div className="space-y-5">
       <div className="rounded-3xl border border-white/5 bg-white/3 p-6">
-        <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">
+        <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
           Captain Tools
         </p>
         <h3 className="text-2xl font-semibold text-white">Create a new lobby</h3>
@@ -65,7 +65,7 @@ export function JoinAndCreateColumn({
         className="space-y-4 rounded-3xl border border-white/5 bg-white/3 p-6"
       >
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">
+          <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
             Join by Code
           </p>
           <h3 className="text-2xl font-semibold text-white">Enter invite code</h3>
@@ -82,23 +82,23 @@ export function JoinAndCreateColumn({
             disabled={joinFlowState === "submitting" || !canJoinLobby}
           />
         </label>
-        <div>
-          <p className="text-sm text-white/70">Preferred Team</p>
+        <fieldset className="border-0 p-0">
+          <legend className="text-sm text-white/80">Preferred Team</legend>
           <div className="mt-2 flex gap-3">
             {LOBBY_TEAM_OPTIONS.map((team) => (
               <label
                 key={team}
-                className={`cursor-pointer rounded-full border px-4 py-2 text-sm ${
+                className={`cursor-pointer rounded-full border px-4 py-2 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#00CED1] ${
                   joinTeam === team
                     ? "border-cyan-400 text-white"
-                    : "border-white/20 text-white/60"
+                    : "border-white/20 text-white/80"
                 }`}
               >
                 <input
                   type="radio"
                   name="team"
                   value={team}
-                  className="hidden"
+                  className="sr-only"
                   checked={joinTeam === team}
                   onChange={() => onJoinTeamChange(team)}
                 />
@@ -106,7 +106,7 @@ export function JoinAndCreateColumn({
               </label>
             ))}
           </div>
-        </div>
+        </fieldset>
         <button
           type="submit"
           disabled={joinFlowState === "submitting" || !canJoinLobby}
@@ -124,7 +124,7 @@ export function JoinAndCreateColumn({
 
       {pendingJoinRequest && (
         <div className="rounded-3xl border border-white/5 bg-white/3 p-6 text-sm text-white/80">
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">
+          <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
             Join Request Status
           </p>
           <p className="mt-2 text-2xl font-semibold text-white">

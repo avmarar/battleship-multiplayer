@@ -27,7 +27,7 @@ export function ProfileFormCard({
     <section className="rounded-3xl border border-white/5 bg-[#040a1c]/80 p-6 shadow-xl shadow-black/40">
       <form onSubmit={onSubmit} className="space-y-6">
         <div className="space-y-2">
-          <p className="text-sm uppercase tracking-[0.3em] text-cyan-200/80">
+          <p className="text-sm uppercase tracking-[0.3em] text-cyan-100">
             Call sign
           </p>
           <h2 className="text-2xl font-semibold text-white">

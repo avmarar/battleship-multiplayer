@@ -199,18 +199,22 @@ export default function Home() {
       limit(1)
     );
 
-    const unsubscribe = onSnapshot(membershipQuery, (snapshot) => {
-      if (snapshot.empty) {
-        setActiveLobby(null);
-        return;
-      }
+    const unsubscribe = onSnapshot(
+      membershipQuery,
+      (snapshot) => {
+        if (snapshot.empty) {
+          setActiveLobby(null);
+          return;
+        }
 
-      const docSnapshot = snapshot.docs[0];
-      setActiveLobby({
-        ...(docSnapshot.data() as LobbyDocument),
-        id: docSnapshot.id,
-      });
-    });
+        const docSnapshot = snapshot.docs[0];
+        setActiveLobby({
+          ...(docSnapshot.data() as LobbyDocument),
+          id: docSnapshot.id,
+        });
+      },
+      (error) => setLobbyActionError(error.message)
+    );
 
     return () => unsubscribe();
   }, [firestoreDb, connectedUid]);
@@ -226,30 +230,34 @@ export default function Home() {
       where("userId", "==", connectedUid)
     );
 
-    const unsubscribe = onSnapshot(requestQuery, (snapshot) => {
-      if (snapshot.empty) {
-        setPendingJoinRequest(null);
-        return;
-      }
+    const unsubscribe = onSnapshot(
+      requestQuery,
+      (snapshot) => {
+        if (snapshot.empty) {
+          setPendingJoinRequest(null);
+          return;
+        }
 
-      const requests = snapshot.docs
-        .map((docSnapshot) => ({
-          ...(docSnapshot.data() as LobbyJoinRequest),
-          id: docSnapshot.id,
-          path: docSnapshot.ref.path,
-        }))
-        .sort((a, b) => {
-          const aTime =
-            a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
-          const bTime =
-            b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
-          return bTime - aTime;
-        });
+        const requests = snapshot.docs
+          .map((docSnapshot) => ({
+            ...(docSnapshot.data() as LobbyJoinRequest),
+            id: docSnapshot.id,
+            path: docSnapshot.ref.path,
+          }))
+          .sort((a, b) => {
+            const aTime =
+              a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
+            const bTime =
+              b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
+            return bTime - aTime;
+          });
 
-      const pending =
-        requests.find((req) => req.status === "PENDING") ?? requests[0];
-      setPendingJoinRequest(pending);
-    });
+        const pending =
+          requests.find((req) => req.status === "PENDING") ?? requests[0];
+        setPendingJoinRequest(pending);
+      },
+      (error) => setJoinFlowError(error.message)
+    );
 
     return () => unsubscribe();
   }, [firestoreDb, connectedUid]);
@@ -270,13 +278,17 @@ export default function Home() {
     );
     const requestsQuery = query(requestsRef, orderBy("createdAt", "asc"));
 
-    const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
-      const requests = snapshot.docs.map((docSnapshot) => ({
-        ...(docSnapshot.data() as LobbyJoinRequest),
-        id: docSnapshot.id,
-      }));
-      setCaptainJoinRequests(requests);
-    });
+    const unsubscribe = onSnapshot(
+      requestsQuery,
+      (snapshot) => {
+        const requests = snapshot.docs.map((docSnapshot) => ({
+          ...(docSnapshot.data() as LobbyJoinRequest),
+          id: docSnapshot.id,
+        }));
+        setCaptainJoinRequests(requests);
+      },
+      (error) => setLobbyActionError(error.message)
+    );
 
     return () => unsubscribe();
   }, [firestoreDb, activeLobby?.id, isLobbyCaptain]);
@@ -694,6 +706,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-10">
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-10">
+        <header className="space-y-2">
+          <h1 className="text-3xl font-semibold text-white">Lobby</h1>
+          <p className="text-sm text-white/80">
+            Create a squad or join with an invite code. Captains approve requests
+            and can lock the team.
+          </p>
+        </header>
         <section className="grid gap-6 lg:grid-cols-2">
           <ActiveLobbyPanel
             activeLobby={activeLobby}

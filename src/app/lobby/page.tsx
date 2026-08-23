@@ -15,7 +15,6 @@ import {
   getDocs,
   limit,
   onSnapshot,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -276,15 +275,23 @@ export default function Home() {
       activeLobby.id,
       "joinRequests"
     );
-    const requestsQuery = query(requestsRef, orderBy("createdAt", "asc"));
+    const requestsQuery = query(requestsRef);
 
     const unsubscribe = onSnapshot(
       requestsQuery,
       (snapshot) => {
-        const requests = snapshot.docs.map((docSnapshot) => ({
-          ...(docSnapshot.data() as LobbyJoinRequest),
-          id: docSnapshot.id,
-        }));
+        const requests = snapshot.docs
+          .map((docSnapshot) => ({
+            ...(docSnapshot.data() as LobbyJoinRequest),
+            id: docSnapshot.id,
+          }))
+          .sort((a, b) => {
+            const aTime =
+              a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
+            const bTime =
+              b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
+            return aTime - bTime;
+          });
         setCaptainJoinRequests(requests);
       },
       (error) => setLobbyActionError(error.message)
@@ -749,6 +756,7 @@ export default function Home() {
         </section>
 
         <ProfileFormCard
+          uid={connectedUid}
           nickname={nicknameInput}
           statusMessage={statusInput}
           onNicknameChange={setNicknameInput}

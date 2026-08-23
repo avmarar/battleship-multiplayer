@@ -129,22 +129,17 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    function slotFieldsValid(data) {
-      return data.keys().hasOnly(['uid', 'nickname', 'updatedAt']) &&
-        (data.uid == null || data.uid is string) &&
-        (data.nickname == null || data.nickname is string) &&
-        data.updatedAt is timestamp;
-    }
-
     match /matchmakingSlots/open {
       allow read: if isAuthenticated();
 
       allow create: if isAuthenticated() &&
-        slotFieldsValid(request.resource.data) &&
-        request.resource.data.uid == request.auth.uid;
+        request.resource.data.uid == request.auth.uid &&
+        (request.resource.data.nickname == null ||
+          request.resource.data.nickname is string);
 
       allow update: if isAuthenticated() &&
-        slotFieldsValid(request.resource.data) &&
+        (request.resource.data.uid == null ||
+          request.resource.data.uid is string) &&
         (
           (resource.data.uid == null && request.resource.data.uid == request.auth.uid) ||
           (resource.data.uid == request.auth.uid && request.resource.data.uid == null) ||
@@ -155,11 +150,12 @@ service cloud.firestore {
     }
 
     function gameCreateValid(data) {
-      return data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement', 'createdAt']) &&
+      return (data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement', 'createdAt']) ||
+          data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement'])) &&
         data.status == 'PLACEMENT' &&
         data.memberIds is list && data.memberIds.size() == 2 &&
         request.auth.uid in data.memberIds &&
-        data.createdAt is timestamp &&
+        (!data.keys().hasAny(['createdAt']) || data.createdAt is timestamp) &&
         data.placement.ALPHA.isLocked == false &&
         data.placement.BETA.isLocked == false &&
         data.teams.ALPHA.captainId is string &&

@@ -249,7 +249,6 @@ async function shouldProtectMatchmakingAndPlacement(testEnv) {
   );
 
   const alpha = testEnv.authenticatedContext("alpha-uid");
-  const beta = testEnv.authenticatedContext("beta-uid");
   const outsider = testEnv.authenticatedContext("outsider-uid");
   const unauth = testEnv.unauthenticatedContext();
 

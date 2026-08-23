@@ -18,8 +18,15 @@ import {
   type GridCoordinate,
 } from "@/lib/grid/coordinates";
 
+export type CellMark =
+  | "ship"
+  | "ship-selected"
+  | "preview-valid"
+  | "preview-invalid";
+
 export type BattleGridProps = {
   selectedCoordinate?: GridCoordinate | null;
+  marks?: Partial<Record<GridCoordinate, CellMark>>;
   onSelect?: (coordinate: GridCoordinate) => void;
   disabled?: boolean;
   labelledBy?: string;
@@ -27,6 +34,7 @@ export type BattleGridProps = {
 
 export function BattleGrid({
   selectedCoordinate = null,
+  marks,
   onSelect,
   disabled = false,
   labelledBy,
@@ -129,7 +137,7 @@ export function BattleGrid({
         {GRID_COLUMNS.map((column) => (
           <span
             key={column}
-            className="flex h-7 items-center justify-center text-xs font-semibold tracking-[0.2em] text-cyan-200/80"
+            className="flex h-7 items-center justify-center text-xs font-semibold tracking-[0.2em] text-cyan-100"
           >
             {column}
           </span>
@@ -141,6 +149,7 @@ export function BattleGrid({
             row={row}
             rowLabel={rowLabel}
             selectedCoordinate={selectedCoordinate}
+            marks={marks}
             hoveredCoordinate={hoveredCoordinate}
             focusCoordinate={focusCoordinate}
             disabled={disabled}
@@ -160,6 +169,7 @@ type RowCellsProps = {
   row: number;
   rowLabel: number;
   selectedCoordinate: GridCoordinate | null;
+  marks?: Partial<Record<GridCoordinate, CellMark>>;
   hoveredCoordinate: GridCoordinate | null;
   focusCoordinate: GridCoordinate;
   disabled: boolean;
@@ -173,10 +183,37 @@ type RowCellsProps = {
   ) => void;
 };
 
+function cellSurfaceClass(
+  mark: CellMark | undefined,
+  isSelected: boolean,
+  isHovered: boolean
+) {
+  if (mark === "preview-invalid") {
+    return "border-[#FF4500] bg-orange-500/25";
+  }
+  if (mark === "preview-valid") {
+    return "border-[#00CED1] bg-cyan-400/25";
+  }
+  if (mark === "ship-selected") {
+    return "border-[#00CED1] bg-[#1b2738] shadow-[0_0_10px_rgba(0,206,209,0.35)]";
+  }
+  if (mark === "ship") {
+    return "border-[#00CED1]/80 bg-[#1a2230]";
+  }
+  if (isSelected) {
+    return "border-[#00CED1] bg-cyan-400/20 shadow-[0_0_12px_rgba(0,206,209,0.35)]";
+  }
+  if (isHovered) {
+    return "border-cyan-300/70 bg-sky-400/15";
+  }
+  return "border-white/10 bg-[#161d2b] hover:border-cyan-300/50 hover:bg-sky-400/10";
+}
+
 function RowCells({
   row,
   rowLabel,
   selectedCoordinate,
+  marks,
   hoveredCoordinate,
   focusCoordinate,
   disabled,
@@ -188,19 +225,22 @@ function RowCells({
 }: RowCellsProps) {
   return (
     <>
-      <span className="flex items-center justify-center text-xs font-semibold text-cyan-200/80">
+      <span className="flex items-center justify-center text-xs font-semibold text-cyan-100">
         {rowLabel}
       </span>
       {GRID_COLUMNS.map((_, col) => {
         const coordinate = coordinateFromIndices(col, row);
+        const mark = marks?.[coordinate];
         const isSelected = selectedCoordinate === coordinate;
-        const isHovered = hoveredCoordinate === coordinate;
+        const isHovered = hoveredCoordinate === coordinate && !mark;
         const tabIndex = focusCoordinate === coordinate ? 0 : -1;
+        const showCrosshair = isSelected && !mark;
 
         return (
           <button
             key={coordinate}
             type="button"
+            data-coordinate={coordinate}
             ref={(node) => {
               if (node) {
                 cellRefs.current.set(coordinate, node);
@@ -211,7 +251,7 @@ function RowCells({
             tabIndex={disabled ? -1 : tabIndex}
             disabled={disabled}
             aria-label={`Cell ${coordinate}`}
-            aria-pressed={isSelected}
+            aria-pressed={isSelected || mark === "ship-selected"}
             onMouseEnter={() => onHover(coordinate)}
             onMouseLeave={() => onHover(null)}
             onFocus={() => {
@@ -225,14 +265,10 @@ function RowCells({
               "relative aspect-square min-h-[44px] min-w-[44px] rounded-sm border transition duration-150",
               "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#00CED1]",
               "active:scale-90 disabled:cursor-not-allowed disabled:opacity-50",
-              isSelected
-                ? "border-[#00CED1] bg-cyan-400/20 shadow-[0_0_12px_rgba(0,206,209,0.35)]"
-                : isHovered
-                  ? "border-cyan-300/70 bg-sky-400/15"
-                  : "border-white/10 bg-[#161d2b] hover:border-cyan-300/50 hover:bg-sky-400/10",
+              cellSurfaceClass(mark, isSelected, isHovered),
             ].join(" ")}
           >
-            {isSelected ? (
+            {showCrosshair ? (
               <span aria-hidden className="pointer-events-none absolute inset-0">
                 <span className="absolute top-1/4 bottom-1/4 left-1/2 w-px bg-[#00CED1]/90" />
                 <span className="absolute right-1/4 left-1/4 top-1/2 h-px bg-[#00CED1]/90" />

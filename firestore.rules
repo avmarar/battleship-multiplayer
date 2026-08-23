@@ -100,12 +100,16 @@ service cloud.firestore {
         resource.data.captainId == request.auth.uid;
     }
 
+    match /{path=**}/joinRequests/{requestId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
     match /lobbies/{lobbyId}/joinRequests/{requestId} {
       allow read: if isLobbyCaptain(lobbyId) ||
         (isAuthenticated() &&
           (request.auth.uid == requestId ||
-            (resource.data.userId != null &&
-              resource.data.userId == request.auth.uid)));
+            resource.data.userId == request.auth.uid));
 
       allow create: if isAuthenticated() &&
         lobbyExists(lobbyId) &&
@@ -123,6 +127,102 @@ service cloud.firestore {
 
     match /{rootCollection}/{namespace}/users/{userId}/data/{docId} {
       allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function slotFieldsValid(data) {
+      return data.keys().hasOnly(['uid', 'nickname', 'updatedAt']) &&
+        (data.uid == null || data.uid is string) &&
+        (data.nickname == null || data.nickname is string) &&
+        data.updatedAt is timestamp;
+    }
+
+    match /matchmakingSlots/open {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        slotFieldsValid(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid;
+
+      allow update: if isAuthenticated() &&
+        slotFieldsValid(request.resource.data) &&
+        (
+          (resource.data.uid == null && request.resource.data.uid == request.auth.uid) ||
+          (resource.data.uid == request.auth.uid && request.resource.data.uid == null) ||
+          (resource.data.uid != null &&
+            resource.data.uid != request.auth.uid &&
+            request.resource.data.uid == null)
+        );
+    }
+
+    function gameCreateValid(data) {
+      return data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement', 'createdAt']) &&
+        data.status == 'PLACEMENT' &&
+        data.memberIds is list && data.memberIds.size() == 2 &&
+        request.auth.uid in data.memberIds &&
+        data.createdAt is timestamp &&
+        data.placement.ALPHA.isLocked == false &&
+        data.placement.BETA.isLocked == false &&
+        data.teams.ALPHA.captainId is string &&
+        data.teams.BETA.captainId is string;
+    }
+
+    function gamePlayerTeam() {
+      return request.auth.uid in resource.data.teams.ALPHA.memberIds
+        ? 'ALPHA'
+        : (request.auth.uid in resource.data.teams.BETA.memberIds ? 'BETA' : '');
+    }
+
+    function gameLockUpdateValid() {
+      let team = gamePlayerTeam();
+      let other = team == 'ALPHA' ? 'BETA' : 'ALPHA';
+      return team != '' &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.teams == resource.data.teams &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        resource.data.placement[team].isLocked == false &&
+        request.resource.data.placement[team].isLocked == true &&
+        request.resource.data.placement[other].isLocked == resource.data.placement[other].isLocked;
+    }
+
+    match /games/{gameId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.memberIds;
+
+      allow create: if isAuthenticated() && gameCreateValid(request.resource.data);
+
+      allow update: if isAuthenticated() &&
+        request.auth.uid in resource.data.memberIds &&
+        gameLockUpdateValid();
+    }
+
+    match /games/{gameId}/teams/{teamId} {
+      function parentGame() {
+        return get(/databases/$(database)/documents/games/$(gameId)).data;
+      }
+
+      function isParentMember() {
+        return isAuthenticated() &&
+          exists(/databases/$(database)/documents/games/$(gameId)) &&
+          request.auth.uid in parentGame().memberIds;
+      }
+
+      function isTeamMember() {
+        return isParentMember() && request.auth.uid in parentGame().teams[teamId].memberIds;
+      }
+
+      allow read: if isTeamMember();
+
+      allow create: if isParentMember() &&
+        request.resource.data.teamId == teamId &&
+        request.resource.data.isLocked == false &&
+        request.resource.data.ships is list &&
+        request.resource.data.shotsFired is list;
+
+      allow update: if isTeamMember() &&
+        resource.data.isLocked == false &&
+        request.resource.data.teamId == resource.data.teamId &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.shotsFired == resource.data.shotsFired;
     }
   }
 }

@@ -34,7 +34,7 @@ export function ActiveLobbyPanel({
     <div className="space-y-5 rounded-3xl border border-white/5 bg-[#050b1a]/80 p-6 shadow-xl shadow-black/30">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">
+          <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
             Active Lobby
           </p>
           <h2 className="text-2xl font-semibold text-white">
@@ -68,7 +68,7 @@ export function ActiveLobbyPanel({
             </span>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">
+            <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
               Members
             </p>
             <div className="mt-3 space-y-2">
@@ -96,7 +96,7 @@ export function ActiveLobbyPanel({
           {isLobbyCaptain ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">
+                <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
                   Join Requests
                 </p>
                 <span className="text-xs text-white/60">

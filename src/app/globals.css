@@ -46,6 +46,26 @@ body {
   line-height: 1.5;
 }
 
-a {
-  color: var(--accent);
+@layer base {
+  a {
+    color: inherit;
+  }
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: 0;
+  z-index: 60;
+  transform: translateY(-160%);
+  border-radius: 9999px;
+  background: #00ced1;
+  color: #041218;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  transform: translateY(0.75rem);
 }

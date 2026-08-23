@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SiteNav } from "@/components/layout/SiteNav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Battleship Multiplayer | Sprint 1",
+  title: "Battleship Multiplayer",
   description:
-    "Sprint 1 playground for the Battleship multiplayer project – Firebase auth proof of concept.",
+    "Team-based multiplayer Battleship — lobby, placement, and real-time match play.",
 };
 
 export default function RootLayout({
@@ -26,7 +27,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
+        <a href="#content" className="skip-link">
+          Skip to content
+        </a>
+        <SiteNav />
+        <div id="content">{children}</div>
       </body>
     </html>
   );

@@ -11,9 +11,9 @@ const sections = [
   {
     title: "Placement",
     description:
-      "Interactive 10×10 sonar grid with local cell selection. Ship drag/lock follows in Sprint 3.",
+      "Drag, rotate, and lock a legal fleet. Quick Play pairs two clients into one match.",
     href: "/placement",
-    badge: "Sprint 2",
+    badge: "Sprint 3",
   },
   {
     title: "Game",
@@ -44,10 +44,16 @@ export default function Home() {
               Sprint Workbench
             </h1>
             <p className="max-w-3xl text-base text-white/70">
-              Navigate to a dedicated workspace for each core epic. Lobby and
-              the placement grid cover Sprint&nbsp;2; Game and Scoreboard stay
+              Navigate to a dedicated workspace for each core epic. Placement now
+              covers the Sprint&nbsp;3 vertical slice; Game and Scoreboard stay
               placeholders for later iterations.
             </p>
+            <Link
+              href="/placement?quickPlay=1"
+              className="inline-flex rounded-full bg-[#00CED1] px-6 py-3 text-sm font-semibold uppercase tracking-wide text-[#041218] transition hover:brightness-110 hover:text-[#041218] active:scale-90"
+            >
+              Quick Play
+            </Link>
           </div>
         </header>
 
@@ -57,18 +63,19 @@ export default function Home() {
               <Link
                 key={section.href}
                 href={section.href}
+                aria-label={`Open ${section.title} workspace`}
                 className="group rounded-3xl border border-white/5 bg-white/2 p-6 transition hover:border-cyan-400/50"
               >
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-cyan-200/80">
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-cyan-100">
                   {section.badge}
                 </div>
-                <h2 className="text-2xl font-semibold text-white group-hover:text-cyan-200">
+                <h2 className="text-2xl font-semibold text-white group-hover:text-cyan-100">
                   {section.title}
                 </h2>
                 <p className="mt-2 text-sm text-white/70">
                   {section.description}
                 </p>
-                <span className="mt-4 inline-flex items-center text-sm font-semibold text-cyan-200">
+                <span className="mt-4 inline-flex items-center text-sm font-semibold text-cyan-100">
                   Enter Workspace →
                 </span>
               </Link>

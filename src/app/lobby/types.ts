@@ -1,8 +1,10 @@
 import type { Timestamp } from "firebase/firestore";
 import type {
-  LobbyDocument,
-  LobbyJoinRequest,
-} from "@/lib/lobbies/types";
+  MatchDocument,
+  MatchJoinRequest,
+  MatchTeamDocument,
+  MatchTeamId,
+} from "@/lib/matches/types";
 
 export type ProfileDocument = {
   nickname?: string;
@@ -17,8 +19,11 @@ export type AuthState =
   | { status: "error"; message: string }
   | { status: "connected"; uid: string };
 
-export type LobbySnapshot = LobbyDocument & { id: string };
-export type JoinRequestWithPath = LobbyJoinRequest & {
+export type MatchSnapshot = MatchDocument & { id: string };
+
+export type MatchTeamSnapshot = MatchTeamDocument & { id: MatchTeamId };
+
+export type JoinRequestWithPath = MatchJoinRequest & {
   id: string;
   path?: string;
 };

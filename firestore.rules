@@ -169,15 +169,14 @@ service cloud.firestore {
     }
 
     match /{path=**}/joinRequests/{requestId} {
-      allow read: if isAuthenticated() &&
-        resource.data.userId == request.auth.uid;
+      // Owner reads by document id (path listener). Avoid resource.data.userId so
+      // incomplete legacy docs cannot break evaluation.
+      allow get: if isAuthenticated() && request.auth.uid == requestId;
     }
 
     match /lobbies/{lobbyId}/joinRequests/{requestId} {
       allow read: if isTeamCaptain(lobbyId) ||
-        (isAuthenticated() &&
-          (request.auth.uid == requestId ||
-            resource.data.userId == request.auth.uid));
+        (isAuthenticated() && request.auth.uid == requestId);
 
       allow create: if isAuthenticated() &&
         lobbyExists(lobbyId) &&
@@ -300,10 +299,260 @@ service cloud.firestore {
         );
     }
 
+    function matchPath(matchId) {
+      return /databases/$(database)/documents/matches/$(matchId);
+    }
+
+    function matchExists(matchId) {
+      return exists(matchPath(matchId));
+    }
+
+    function matchData(matchId) {
+      return get(matchPath(matchId)).data;
+    }
+
+    function isMatchAlphaCaptain(matchId) {
+      return isAuthenticated() &&
+        matchExists(matchId) &&
+        matchData(matchId).keys().hasAny(['captainIdAlpha']) &&
+        matchData(matchId).captainIdAlpha == request.auth.uid;
+    }
+
+    function isMatchBetaCaptain(matchId) {
+      return isAuthenticated() &&
+        matchExists(matchId) &&
+        matchData(matchId).keys().hasAny(['captainIdBeta']) &&
+        matchData(matchId).captainIdBeta == request.auth.uid;
+    }
+
+    function isMatchTeamCaptain(matchId, teamId) {
+      return (teamId == 'ALPHA' && isMatchAlphaCaptain(matchId)) ||
+        (teamId == 'BETA' && isMatchBetaCaptain(matchId));
+    }
+
+    function allowedMatchModes() {
+      return ['1v1', 'MULTIPLAYER'];
+    }
+
+    function isValidMatchInvite(code) {
+      return code is string && code.size() == 6 && code.matches('^[A-Z0-9]+$');
+    }
+
+    function matchCreateValid(data) {
+      return data.keys().hasOnly(['mode', 'matchCode', 'captainIdAlpha', 'status', 'memberIds', 'maxMembersPerTeam', 'createdAt']) &&
+        data.mode in allowedMatchModes() &&
+        isValidMatchInvite(data.matchCode) &&
+        data.captainIdAlpha == request.auth.uid &&
+        data.status == 'LOBBY' &&
+        data.memberIds is list &&
+        data.memberIds.size() == 1 &&
+        data.memberIds[0] == request.auth.uid &&
+        data.maxMembersPerTeam is number &&
+        data.maxMembersPerTeam >= 1 &&
+        data.maxMembersPerTeam <= 8 &&
+        data.createdAt is timestamp;
+    }
+
+    function matchImmutableUnchanged() {
+      return request.resource.data.mode == resource.data.mode &&
+        request.resource.data.matchCode == resource.data.matchCode &&
+        request.resource.data.captainIdAlpha == resource.data.captainIdAlpha &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.maxMembersPerTeam == resource.data.maxMembersPerTeam &&
+        (
+          resource.data.keys().hasAny(['captainIdBeta'])
+            ? request.resource.data.captainIdBeta == resource.data.captainIdBeta
+            : true
+        );
+    }
+
+    function betaCaptainSelfSeat() {
+      return isAuthenticated() &&
+        !resource.data.keys().hasAny(['captainIdBeta']) &&
+        request.resource.data.captainIdBeta == request.auth.uid &&
+        request.resource.data.status == resource.data.status &&
+        !(request.auth.uid in resource.data.memberIds) &&
+        request.auth.uid in request.resource.data.memberIds &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['captainIdBeta', 'memberIds']);
+    }
+
+    function matchMemberIdsExpandOnly(matchId) {
+      return isAuthenticated() &&
+        matchImmutableUnchanged() &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
+        (
+          isMatchAlphaCaptain(matchId) ||
+          isMatchBetaCaptain(matchId)
+        );
+    }
+
+    function alphaStartGameStamp(matchId) {
+      return isMatchAlphaCaptain(matchId) &&
+        matchImmutableUnchanged() &&
+        resource.data.status == 'LOBBY' &&
+        request.resource.data.status == 'PLACEMENT' &&
+        request.resource.data.gameId is string &&
+        request.resource.data.gameId.size() > 0 &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'gameId']);
+    }
+
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() && matchCreateValid(request.resource.data);
+
+      allow update: if betaCaptainSelfSeat() ||
+        alphaStartGameStamp(matchId) ||
+        matchMemberIdsExpandOnly(matchId) ||
+        (
+          isMatchAlphaCaptain(matchId) &&
+          matchImmutableUnchanged() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'memberIds', 'gameId'])
+        );
+
+      allow delete: if isMatchAlphaCaptain(matchId);
+    }
+
+    match /{path=**}/matchTeams/{teamId} {
+      allow read: if isAuthenticated();
+    }
+
+    match /matches/{matchId}/matchTeams/{teamId} {
+      function parentMatch() {
+        return matchData(matchId);
+      }
+
+      function teamCreateValid(data) {
+        return teamId in allowedTeams() &&
+          data.teamId == teamId &&
+          data.memberIds is list &&
+          data.members is map &&
+          data.isLocked is bool &&
+          (data.keys().hasAny(['inviteCode']) ? isValidMatchInvite(data.inviteCode) : true) &&
+          (
+            (teamId == 'ALPHA' &&
+              data.captainId == request.auth.uid &&
+              data.memberIds.size() == 1 &&
+              data.memberIds[0] == request.auth.uid) ||
+            (teamId == 'BETA' &&
+              data.captainId == '' &&
+              data.memberIds.size() == 0)
+          );
+      }
+
+      function onlyOwnTeamReadyChanged() {
+        let uid = request.auth.uid;
+        return isAuthenticated() &&
+          uid in resource.data.memberIds &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
+          request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([uid]) &&
+          request.resource.data.members[uid].diff(resource.data.members[uid]).affectedKeys().hasOnly(['isReady']) &&
+          request.resource.data.members[uid].isReady is bool;
+      }
+
+      function betaTeamSelfSeat() {
+        return isAuthenticated() &&
+          teamId == 'BETA' &&
+          matchExists(matchId) &&
+          parentMatch().keys().hasAny(['captainIdBeta']) &&
+          parentMatch().captainIdBeta == request.auth.uid &&
+          (resource.data.captainId == '' || resource.data.captainId == request.auth.uid) &&
+          request.resource.data.captainId == request.auth.uid &&
+          request.auth.uid in request.resource.data.memberIds &&
+          request.resource.data.teamId == 'BETA' &&
+          request.resource.data.isLocked == resource.data.isLocked &&
+          (
+            !resource.data.keys().hasAny(['inviteCode']) ||
+            request.resource.data.inviteCode == resource.data.inviteCode
+          );
+      }
+
+      function teamCaptainRosterOrLock() {
+        return isMatchTeamCaptain(matchId, teamId) &&
+          request.resource.data.teamId == resource.data.teamId &&
+          request.resource.data.captainId == resource.data.captainId &&
+          (
+            !resource.data.keys().hasAny(['inviteCode']) ||
+            request.resource.data.inviteCode == resource.data.inviteCode
+          ) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['memberIds', 'members', 'isLocked']);
+      }
+
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        matchExists(matchId) &&
+        isMatchAlphaCaptain(matchId) &&
+        teamCreateValid(request.resource.data);
+
+      allow update: if onlyOwnTeamReadyChanged() ||
+        betaTeamSelfSeat() ||
+        teamCaptainRosterOrLock();
+
+      allow delete: if isMatchAlphaCaptain(matchId);
+    }
+
+    match /matches/{matchId}/matchTeams/{teamId}/joinRequests/{requestId} {
+      function teamDoc() {
+        return get(/databases/$(database)/documents/matches/$(matchId)/matchTeams/$(teamId)).data;
+      }
+
+      function matchJoinCreateValid(data) {
+        return data.keys().hasOnly(['matchId', 'teamId', 'userId', 'nickname', 'inviteCode', 'status', 'createdAt']) &&
+          data.matchId == matchId &&
+          data.teamId == teamId &&
+          data.userId == requestId &&
+          data.userId == request.auth.uid &&
+          data.nickname is string && data.nickname.size() > 0 &&
+          isValidMatchInvite(data.inviteCode) &&
+          data.status == 'PENDING' &&
+          data.createdAt is timestamp &&
+          teamDoc().keys().hasAny(['inviteCode']) &&
+          data.inviteCode == teamDoc().inviteCode;
+      }
+
+      // Captain path queries only. Owner single-doc reads use /{path=**}/joinRequests.
+      allow read: if isAuthenticated() &&
+        matchExists(matchId) &&
+        (
+          (teamId == 'ALPHA' && matchData(matchId).captainIdAlpha == request.auth.uid) ||
+          (
+            teamId == 'BETA' &&
+            matchData(matchId).keys().hasAny(['captainIdBeta']) &&
+            matchData(matchId).captainIdBeta == request.auth.uid
+          )
+        );
+
+      allow create: if isAuthenticated() &&
+        matchExists(matchId) &&
+        matchData(matchId).mode == 'MULTIPLAYER' &&
+        matchData(matchId).status == 'LOBBY' &&
+        teamDoc().isLocked == false &&
+        requestId == request.auth.uid &&
+        matchJoinCreateValid(request.resource.data);
+
+      allow update: if isMatchTeamCaptain(matchId, teamId) &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.matchId == resource.data.matchId &&
+        request.resource.data.teamId == resource.data.teamId &&
+        request.resource.data.inviteCode == resource.data.inviteCode &&
+        request.resource.data.nickname == resource.data.nickname &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.status in allowedJoinStatuses();
+
+      allow delete: if isMatchTeamCaptain(matchId, teamId) ||
+        (isAuthenticated() && request.auth.uid == requestId);
+    }
+
     match /games/{gameId} {
       allow read: if isAuthenticated() && request.auth.uid in resource.data.memberIds;
 
-      allow create: if isAuthenticated() && gameCreateValid(request.resource.data);
+      allow create: if isAuthenticated() &&
+        gameCreateValid(request.resource.data) &&
+        request.auth.uid == request.resource.data.teams.ALPHA.captainId;
 
       allow update: if isAuthenticated() &&
         request.auth.uid in resource.data.memberIds &&

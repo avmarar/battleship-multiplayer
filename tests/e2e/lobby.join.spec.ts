@@ -1,80 +1,60 @@
 import { expect, test } from "@playwright/test";
 import { resetEmulators, waitForAnonymousAuth } from "./helpers";
 
-test.describe("QA-1.2 lobby create and join", () => {
+test.describe("QA-1.2 match create and join", () => {
   test.beforeEach(async ({ request }) => {
     await resetEmulators(request);
   });
 
-  test("auth → create lobby → Beta captain → dual ready → start", async ({
+  test("1v1: host create → beta joins match code → dual ready → start", async ({
     browser,
   }) => {
-    const captainContext = await browser.newContext();
-    const crewContext = await browser.newContext();
-    const captain = await captainContext.newPage();
-    const crew = await crewContext.newPage();
+    const hostContext = await browser.newContext();
+    const peerContext = await browser.newContext();
+    const host = await hostContext.newPage();
+    const peer = await peerContext.newPage();
 
     try {
-      await captain.goto("/lobby");
-      await waitForAnonymousAuth(captain);
-      await captain.getByTestId("create-lobby").click();
-      await expect(captain.getByTestId("invite-code")).toHaveText(/^[A-Z0-9]{6}$/);
-      await expect(captain.getByTestId("invite-code-beta")).toHaveText(
-        /^[A-Z0-9]{6}$/
-      );
-      await expect(captain.getByTestId("lobby-member-count")).toHaveText(
-        "Members 1/8"
-      );
-      await expect(captain.getByTestId("captain-status")).toHaveText(
+      await host.goto("/lobby?mode=1v1");
+      await waitForAnonymousAuth(host);
+      await host.getByTestId("mode-1v1").click();
+      await host.getByTestId("create-lobby").click();
+      await expect(host.getByTestId("match-code")).toHaveText(/^[A-Z0-9]{6}$/);
+      await expect(host.getByTestId("match-mode")).toHaveText("1v1");
+      await expect(host.getByTestId("captain-status")).toHaveText(
         "Awaiting Beta captain"
       );
+      await expect(host.getByTestId("crew-invite-code")).toHaveCount(0);
 
-      const inviteCode = (await captain.getByTestId("invite-code").innerText()).trim();
-      const betaCode = (
-        await captain.getByTestId("invite-code-beta").innerText()
-      ).trim();
-      expect(inviteCode).not.toBe(betaCode);
+      const matchCode = (await host.getByTestId("match-code").innerText()).trim();
 
-      await crew.goto("/lobby");
-      await waitForAnonymousAuth(crew);
-      await crew.getByTestId("join-code-input").fill(betaCode);
-      await crew.getByTestId("join-lobby").click();
-      await expect(crew.getByTestId("join-request-status")).toHaveText("PENDING");
+      await peer.goto("/lobby?mode=1v1");
+      await waitForAnonymousAuth(peer);
+      await peer.getByTestId("join-code-input").fill(matchCode);
+      await peer.getByTestId("join-lobby").click();
 
-      await captain.reload();
-      await waitForAnonymousAuth(captain);
-      await expect(captain.getByRole("button", { name: "Approve" })).toBeVisible({
-        timeout: 15_000,
-      });
-      await captain.getByRole("button", { name: "Approve" }).click();
-
-      await expect(captain.getByTestId("lobby-member-count")).toHaveText(
-        "Members 2/8"
+      await expect(host.getByTestId("captain-status")).toHaveText(
+        "Alpha + Beta captains",
+        { timeout: 15_000 }
       );
-      await expect(crew.getByTestId("lobby-member-count")).toHaveText(
-        "Members 2/8"
-      );
-      await expect(crew.getByTestId("join-request-status")).toHaveText("APPROVED");
-      await expect(captain.getByTestId("captain-status")).toHaveText(
-        "Alpha + Beta captains"
-      );
-      await expect(crew.getByText("Captain · BETA · You")).toBeVisible();
+      await expect(peer.getByTestId("match-code")).toHaveText(matchCode);
+      await expect(peer.getByText("Captain · BETA · You")).toBeVisible();
 
-      await expect(captain.getByTestId("start-placement")).toBeDisabled();
-      await captain.getByTestId("toggle-ready").click();
-      await crew.getByTestId("toggle-ready").click();
-      await expect(captain.getByTestId("ready-count")).toHaveText("Ready 2/2");
-      await expect(captain.getByTestId("start-placement")).toBeEnabled();
-      await captain.getByTestId("start-placement").click();
-      await expect(captain).toHaveURL(/\/placement\?gameId=/);
-      await expect(crew).toHaveURL(/\/placement\?gameId=/, { timeout: 15_000 });
-      const captainGameId = new URL(captain.url()).searchParams.get("gameId");
-      const crewGameId = new URL(crew.url()).searchParams.get("gameId");
-      expect(captainGameId).toBeTruthy();
-      expect(crewGameId).toBe(captainGameId);
+      await expect(host.getByTestId("start-placement")).toBeDisabled();
+      await host.getByTestId("toggle-ready").click();
+      await peer.getByTestId("toggle-ready").click();
+      await expect(host.getByTestId("ready-count")).toHaveText("Ready 2/2");
+      await expect(host.getByTestId("start-placement")).toBeEnabled();
+      await host.getByTestId("start-placement").click();
+      await expect(host).toHaveURL(/\/placement\?gameId=/);
+      await expect(peer).toHaveURL(/\/placement\?gameId=/, { timeout: 15_000 });
+      const hostGameId = new URL(host.url()).searchParams.get("gameId");
+      const peerGameId = new URL(peer.url()).searchParams.get("gameId");
+      expect(hostGameId).toBeTruthy();
+      expect(peerGameId).toBe(hostGameId);
     } finally {
-      await captainContext.close();
-      await crewContext.close();
+      await hostContext.close();
+      await peerContext.close();
     }
   });
 });

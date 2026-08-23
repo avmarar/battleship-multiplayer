@@ -51,7 +51,12 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
   const ended = game?.status === "ENDED";
   const shooterPresence = usePresenceDoc(db, ended ? null : shooter);
 
-  usePresence({ db, uid, gameId });
+  usePresence({
+    db,
+    uid,
+    gameId,
+    accountType: auth.isAnonymous ? "guest" : "registered",
+  });
 
   useEffect(() => {
     if (!db || !gameId || !uid) {

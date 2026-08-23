@@ -82,7 +82,12 @@ export function PlacementWorkspace({
 
   const uid = auth.uid;
   const db = auth.db;
-  usePresence({ db, uid, gameId });
+  usePresence({
+    db,
+    uid,
+    gameId,
+    accountType: auth.isAnonymous ? "guest" : "registered",
+  });
   const fleetReady = isFleetComplete(ships);
   const locked = lockState === "locked";
   const canLock = isTeamCaptain(game, myTeam, uid);

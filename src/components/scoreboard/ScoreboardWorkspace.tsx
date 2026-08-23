@@ -150,8 +150,9 @@ export function ScoreboardWorkspace({ gameId }: ScoreboardWorkspaceProps) {
         </p>
         <h1 className="text-3xl font-semibold text-white">Fleet standings</h1>
         <p className="text-sm text-white/70">
-          Wins and losses are recorded when a match ends. Sort by win rate,
-          raw wins, or most recent battle.
+          Ranked W/L from matches where every commander was registered. Guest
+          sessions are not recorded. Sort by win rate, raw wins, or most recent
+          battle.
         </p>
       </header>
 
@@ -190,7 +191,8 @@ export function ScoreboardWorkspace({ gameId }: ScoreboardWorkspaceProps) {
 
         {ranked.length === 0 ? (
           <p className="text-sm text-white/60" data-testid="leaderboard-empty">
-            No recorded matches yet. Finish a battle to appear here.
+            No ranked standings yet. Only matches where every player is
+            registered are recorded.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-3xl border border-white/10">

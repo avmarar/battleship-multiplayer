@@ -12,8 +12,12 @@ test.describe("QA-1 / AUTH-1.3 / DP-2.3 smoke", () => {
     await page.goto("/lobby");
     await waitForAnonymousAuth(page);
 
-    const uid = await page.getByTestId("auth-uid").innerText();
+    const uid = (await page.getByTestId("auth-uid").innerText()).trim();
     expect(uid.length).toBeGreaterThan(8);
+    await expect(page.getByTestId("profile-nickname")).toHaveValue(
+      `Guest-${uid.slice(0, 4).toUpperCase()}`,
+      { timeout: 10_000 }
+    );
 
     await saveNickname(page, "Captain Aurora");
     await expect(page.getByTestId("profile-nickname")).toHaveValue(

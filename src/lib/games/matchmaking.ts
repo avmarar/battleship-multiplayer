@@ -10,6 +10,7 @@ import {
   Timestamp,
   where,
 } from "firebase/firestore";
+import { guestNickname } from "@/lib/profile/nickname";
 import {
   GAMES_COLLECTION,
   GAME_TEAMS_COLLECTION,
@@ -21,10 +22,6 @@ import {
 export type QuickPlayResult =
   | { status: "waiting" }
   | { status: "matched"; gameId: string };
-
-function guestNickname(uid: string) {
-  return `Guest-${uid.slice(0, 4).toUpperCase()}`;
-}
 
 function teamPayload(
   teamId: GameTeamId,

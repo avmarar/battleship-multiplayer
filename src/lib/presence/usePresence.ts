@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { Firestore } from "firebase/firestore";
+import type { AccountType } from "@/lib/profile/accountType";
 import { PRESENCE_HEARTBEAT_MS } from "./types";
 import { writePresence } from "./writePresence";
 
@@ -10,9 +11,16 @@ type UsePresenceOptions = {
   uid: string | null;
   gameId?: string | null;
   matchId?: string | null;
+  accountType?: AccountType;
 };
 
-export function usePresence({ db, uid, gameId, matchId }: UsePresenceOptions) {
+export function usePresence({
+  db,
+  uid,
+  gameId,
+  matchId,
+  accountType = "guest",
+}: UsePresenceOptions) {
   useEffect(() => {
     if (!db || !uid) {
       return;
@@ -28,6 +36,7 @@ export function usePresence({ db, uid, gameId, matchId }: UsePresenceOptions) {
         isConnected,
         gameId: gameId ?? null,
         matchId: matchId ?? null,
+        accountType,
       }).catch(() => undefined);
     };
 
@@ -51,5 +60,5 @@ export function usePresence({ db, uid, gameId, matchId }: UsePresenceOptions) {
       window.removeEventListener("pagehide", onUnload);
       beat(false);
     };
-  }, [db, uid, gameId, matchId]);
+  }, [db, uid, gameId, matchId, accountType]);
 }

@@ -91,6 +91,7 @@ describe("anonymous session cleanup (RES-2)", () => {
     expect(result).toEqual({
       deletedProfiles: 1,
       deletedPresence: 1,
+      deletedLeaderboard: 1,
       skippedRegistered: 1,
     });
 
@@ -108,7 +109,7 @@ describe("anonymous session cleanup (RES-2)", () => {
       expect(
         (await db.doc(profileDocPath("registered-old")).get()).exists
       ).toBe(true);
-      expect((await db.doc("leaderboard/guest-old").get()).exists).toBe(true);
+      expect((await db.doc("leaderboard/guest-old").get()).exists).toBe(false);
     });
   });
 });

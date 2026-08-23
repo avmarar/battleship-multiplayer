@@ -4,6 +4,7 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
+import type { AccountType } from "@/lib/profile/accountType";
 import { PRESENCE_COLLECTION } from "./types";
 
 export async function writePresence(
@@ -13,6 +14,7 @@ export async function writePresence(
     isConnected: boolean;
     gameId?: string | null;
     matchId?: string | null;
+    accountType?: AccountType;
   }
 ) {
   await setDoc(
@@ -23,6 +25,7 @@ export async function writePresence(
       lastSeenAt: serverTimestamp(),
       gameId: input.gameId ?? null,
       matchId: input.matchId ?? null,
+      accountType: input.accountType ?? "guest",
     },
     { merge: true }
   );

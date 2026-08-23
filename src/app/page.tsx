@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ResumeMatchCard } from "@/components/hub/ResumeMatchCard";
 
 const modes = [
   {
@@ -35,9 +36,9 @@ const sections = [
   {
     title: "Scoreboard",
     description:
-      "Persisted match summaries and leaderboard insights for later sprints.",
+      "Post-match summaries plus authenticated W/L standings.",
     href: "/scoreboard",
-    badge: "Stub",
+    badge: "Sprint 6",
   },
 ];
 
@@ -81,6 +82,7 @@ export default function Home() {
           >
             Quick Play (dev)
           </Link>
+          <ResumeMatchCard />
         </header>
 
         <section className="rounded-3xl border border-white/5 bg-white/3 p-8">

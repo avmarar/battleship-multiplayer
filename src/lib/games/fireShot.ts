@@ -5,6 +5,7 @@ import {
   resolveShot,
 } from "./combat";
 import { opponentTeam, teamForPlayer } from "./matchmaking";
+import { recordMatchStats } from "@/lib/leaderboard/recordMatchStats";
 import {
   GAMES_COLLECTION,
   GAME_TEAMS_COLLECTION,
@@ -27,7 +28,7 @@ export async function fireShot(
 ): Promise<FireShotResult> {
   const gameRef = doc(db, GAMES_COLLECTION, gameId);
 
-  return runTransaction(db, async (transaction) => {
+  const result = await runTransaction(db, async (transaction) => {
     const gameSnapshot = await transaction.get(gameRef);
     if (!gameSnapshot.exists()) {
       throw new Error("Match no longer exists.");
@@ -110,4 +111,14 @@ export async function fireShot(
       winnerTeam: undefined,
     };
   });
+
+  if (result.ended) {
+    try {
+      await recordMatchStats(db, gameId, uid);
+    } catch {
+      // Opponent / summary screen retries; the match is already ENDED.
+    }
+  }
+
+  return result;
 }

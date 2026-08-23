@@ -29,6 +29,8 @@ type ActiveLobbyPanelProps = {
   onStartPlacement: () => void;
   onToggleTeamLock: () => void;
   onDisbandMatch: () => void;
+  canTakeCommand?: boolean;
+  onTakeCommand?: () => void;
 };
 
 function teamMembers(team: MatchTeamSnapshot | null): MatchMember[] {
@@ -57,6 +59,8 @@ export function ActiveLobbyPanel({
   onStartPlacement,
   onToggleTeamLock,
   onDisbandMatch,
+  canTakeCommand = false,
+  onTakeCommand,
 }: ActiveLobbyPanelProps) {
   const myTeam =
     myTeamId === "ALPHA" ? alphaTeam : myTeamId === "BETA" ? betaTeam : null;
@@ -277,6 +281,16 @@ export function ActiveLobbyPanel({
             </div>
           ) : null}
           <div className="flex flex-wrap gap-3">
+            {canTakeCommand && onTakeCommand && (
+              <button
+                type="button"
+                data-testid="take-command"
+                onClick={onTakeCommand}
+                className="rounded-full bg-amber-300 px-5 py-2 text-sm font-semibold text-[#041218]"
+              >
+                Take command
+              </button>
+            )}
             {canToggleReady && (
               <button
                 type="button"

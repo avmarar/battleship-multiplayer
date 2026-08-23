@@ -273,6 +273,20 @@ service cloud.firestore {
         request.resource.data.currentTurnIndex == 0;
     }
 
+    function presencePath(uid) {
+      return /databases/$(database)/documents/presence/$(uid);
+    }
+
+    function presenceIsStale(uid, seconds) {
+      return exists(presencePath(uid)) &&
+        get(presencePath(uid)).data.lastSeenAt is timestamp &&
+        get(presencePath(uid)).data.lastSeenAt < request.time - duration.value(seconds, 's');
+    }
+
+    function currentShooterUid() {
+      return resource.data.turnOrder[resource.data.currentTurnIndex];
+    }
+
     function gameTurnAdvanceOrEndValid() {
       return request.auth.uid in resource.data.memberIds &&
         resource.data.status == 'BATTLE' &&
@@ -297,6 +311,148 @@ service cloud.firestore {
             request.resource.data.currentTurnIndex == resource.data.currentTurnIndex
           )
         );
+    }
+
+    function gameSkipTurnValid() {
+      return request.auth.uid in resource.data.memberIds &&
+        resource.data.status == 'BATTLE' &&
+        request.resource.data.status == 'BATTLE' &&
+        resource.data.turnOrder is list &&
+        resource.data.turnOrder.size() > 0 &&
+        resource.data.currentTurnIndex is number &&
+        request.auth.uid != currentShooterUid() &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.teams == resource.data.teams &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.placement == resource.data.placement &&
+        request.resource.data.turnOrder == resource.data.turnOrder &&
+        request.resource.data.currentTurnIndex is number &&
+        request.resource.data.currentTurnIndex != resource.data.currentTurnIndex &&
+        presenceIsStale(currentShooterUid(), 30);
+    }
+
+    function gameRecordStatsValid() {
+      return request.auth.uid in resource.data.memberIds &&
+        resource.data.status == 'ENDED' &&
+        request.resource.data.status == 'ENDED' &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.teams == resource.data.teams &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.placement == resource.data.placement &&
+        request.resource.data.turnOrder == resource.data.turnOrder &&
+        request.resource.data.winnerTeam == resource.data.winnerTeam &&
+        request.resource.data.currentTurnIndex == resource.data.currentTurnIndex &&
+        request.resource.data.statsRecorded == true &&
+        (
+          !resource.data.keys().hasAny(['statsRecorded']) ||
+          resource.data.statsRecorded != true
+        );
+    }
+
+    function leaderboardGame() {
+      return get(/databases/$(database)/documents/games/$(request.resource.data.lastGameId)).data;
+    }
+
+    function leaderboardPlayerWon(uid) {
+      let game = leaderboardGame();
+      return uid in game.teams[game.winnerTeam].memberIds;
+    }
+
+    function isValidLeaderboardStatWrite(uid) {
+      return isAuthenticated() &&
+        request.resource.data.keys().hasAny(['lastGameId']) &&
+        request.resource.data.lastGameId is string &&
+        exists(/databases/$(database)/documents/games/$(request.resource.data.lastGameId)) &&
+        request.auth.uid in leaderboardGame().memberIds &&
+        uid in leaderboardGame().memberIds &&
+        leaderboardGame().status == 'ENDED' &&
+        leaderboardGame().winnerTeam in ['ALPHA', 'BETA'] &&
+        request.resource.data.uid == uid &&
+        request.resource.data.nickname is string &&
+        request.resource.data.wins is number &&
+        request.resource.data.losses is number &&
+        request.resource.data.lastPlayedAt is timestamp;
+    }
+
+    function isValidLeaderboardCreate(uid) {
+      return (
+        isAuthenticated() &&
+        request.auth.uid == uid &&
+        request.resource.data.uid == uid &&
+        request.resource.data.nickname is string &&
+        request.resource.data.wins == 0 &&
+        request.resource.data.losses == 0
+      ) || (
+        isValidLeaderboardStatWrite(uid) &&
+        request.resource.data.wins == (leaderboardPlayerWon(uid) ? 1 : 0) &&
+        request.resource.data.losses == (leaderboardPlayerWon(uid) ? 0 : 1)
+      );
+    }
+
+    function isOwnNicknameUpdate(uid) {
+      return isAuthenticated() &&
+        request.auth.uid == uid &&
+        request.resource.data.uid == uid &&
+        request.resource.data.nickname is string &&
+        request.resource.data.wins == resource.data.wins &&
+        request.resource.data.losses == resource.data.losses &&
+        (
+          !resource.data.keys().hasAny(['lastGameId']) ||
+          request.resource.data.lastGameId == resource.data.lastGameId
+        );
+    }
+
+    function isValidLeaderboardUpdate(uid) {
+      return isOwnNicknameUpdate(uid) || (
+        isValidLeaderboardStatWrite(uid) &&
+        (
+          !resource.data.keys().hasAny(['lastGameId']) ||
+          resource.data.lastGameId != request.resource.data.lastGameId
+        ) &&
+        request.resource.data.wins == resource.data.wins + (leaderboardPlayerWon(uid) ? 1 : 0) &&
+        request.resource.data.losses == resource.data.losses + (leaderboardPlayerWon(uid) ? 0 : 1)
+      );
+    }
+
+    function matchCaptainHandoverValid() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isAuthenticated() &&
+        request.auth.uid in resource.data.memberIds &&
+        request.resource.data.mode == resource.data.mode &&
+        request.resource.data.matchCode == resource.data.matchCode &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.maxMembersPerTeam == resource.data.maxMembersPerTeam &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        (
+          (
+            changed.hasOnly(['captainIdAlpha']) &&
+            request.resource.data.captainIdAlpha == request.auth.uid &&
+            presenceIsStale(resource.data.captainIdAlpha, 60)
+          ) ||
+          (
+            changed.hasOnly(['captainIdBeta']) &&
+            resource.data.keys().hasAny(['captainIdBeta']) &&
+            request.resource.data.captainIdBeta == request.auth.uid &&
+            presenceIsStale(resource.data.captainIdBeta, 60)
+          )
+        );
+    }
+
+    function teamCaptainHandoverValid() {
+      return isAuthenticated() &&
+        request.auth.uid in resource.data.memberIds &&
+        request.resource.data.captainId == request.auth.uid &&
+        request.resource.data.teamId == resource.data.teamId &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.isLocked == resource.data.isLocked &&
+        (
+          !resource.data.keys().hasAny(['inviteCode']) ||
+          request.resource.data.inviteCode == resource.data.inviteCode
+        ) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['captainId', 'members']) &&
+        presenceIsStale(resource.data.captainId, 60);
     }
 
     function matchPath(matchId) {
@@ -405,6 +561,7 @@ service cloud.firestore {
       allow update: if betaCaptainSelfSeat() ||
         alphaStartGameStamp(matchId) ||
         matchMemberIdsExpandOnly(matchId) ||
+        matchCaptainHandoverValid() ||
         (
           isMatchAlphaCaptain(matchId) &&
           matchImmutableUnchanged() &&
@@ -490,7 +647,8 @@ service cloud.firestore {
 
       allow update: if onlyOwnTeamReadyChanged() ||
         betaTeamSelfSeat() ||
-        teamCaptainRosterOrLock();
+        teamCaptainRosterOrLock() ||
+        teamCaptainHandoverValid();
 
       allow delete: if isMatchAlphaCaptain(matchId);
     }
@@ -559,7 +717,31 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() &&
         request.auth.uid in resource.data.memberIds &&
-        (gameLockUpdateValid() || gameBattleStartValid() || gameTurnAdvanceOrEndValid());
+        (gameLockUpdateValid() ||
+          gameBattleStartValid() ||
+          gameTurnAdvanceOrEndValid() ||
+          gameSkipTurnValid() ||
+          gameRecordStatsValid());
+    }
+
+    match /leaderboard/{uid} {
+      allow read: if isAuthenticated();
+
+      allow create: if isValidLeaderboardCreate(uid);
+
+      allow update: if isValidLeaderboardUpdate(uid);
+    }
+
+    match /presence/{userId} {
+      allow read: if isAuthenticated();
+
+      allow create, update: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == userId &&
+        request.resource.data.isConnected is bool &&
+        request.resource.data.lastSeenAt is timestamp;
+
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
     }
 
     match /games/{gameId}/teams/{teamId} {

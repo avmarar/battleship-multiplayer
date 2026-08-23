@@ -26,6 +26,11 @@ import {
   isFirebaseReady,
 } from "@/lib/firebase/client";
 import { startMatchGame } from "@/lib/games/startMatchGame";
+import { upsertLeaderboardNickname } from "@/lib/leaderboard/upsertNickname";
+import { handoverMatchCaptain, electLongestTenured } from "@/lib/matches/handover";
+import { canHandoverCaptain } from "@/lib/presence/stale";
+import { usePresence } from "@/lib/presence/usePresence";
+import { usePresenceDoc } from "@/lib/presence/usePresenceDoc";
 import { createMatch } from "@/lib/matches/createMatch";
 import {
   approveCrewJoin,
@@ -186,6 +191,19 @@ export function LobbyPageClient() {
 
   const connectedUid = authState.status === "connected" ? authState.uid : null;
   const shouldSubscribeToProfile = firebaseAvailable && !!connectedUid;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  usePresence({
+    db: firestoreDb,
+    uid: connectedUid,
+    matchId: activeMatch?.id ?? null,
+    gameId: activeMatch?.gameId ?? null,
+  });
+
+  useEffect(() => {
+    const tick = window.setInterval(() => setNowMs(Date.now()), 5000);
+    return () => window.clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     if (!shouldSubscribeToProfile || !connectedUid || !firestoreDb) {
@@ -375,6 +393,28 @@ export function LobbyPageClient() {
           ? "BETA"
           : null;
   const isTeamCaptain = isAlphaCaptain || isBetaCaptain;
+  const myTeamDoc =
+    myTeamId === "ALPHA" ? alphaTeam : myTeamId === "BETA" ? betaTeam : null;
+  const teamCaptainId =
+    myTeamId === "ALPHA"
+      ? activeMatch?.captainIdAlpha
+      : myTeamId === "BETA"
+        ? activeMatch?.captainIdBeta
+        : undefined;
+  const captainPresence = usePresenceDoc(
+    firestoreDb,
+    teamCaptainId && teamCaptainId !== connectedUid ? teamCaptainId : null
+  );
+  const canTakeCommand = Boolean(
+    activeMatch &&
+      myTeamId &&
+      connectedUid &&
+      teamCaptainId &&
+      teamCaptainId !== connectedUid &&
+      myTeamDoc &&
+      canHandoverCaptain(captainPresence, nowMs) &&
+      electLongestTenured(myTeamDoc.members, teamCaptainId) === connectedUid
+  );
 
   useEffect(() => {
     if (
@@ -715,6 +755,26 @@ export function LobbyPageClient() {
     }
   };
 
+  const handleTakeCommand = async () => {
+    if (!firestoreDb || !activeMatch || !connectedUid || !myTeamId) {
+      return;
+    }
+    try {
+      await handoverMatchCaptain(
+        firestoreDb,
+        activeMatch.id,
+        myTeamId,
+        connectedUid
+      );
+      setLobbyActionMessage("You are now the team captain.");
+      setLobbyActionError(null);
+    } catch (error) {
+      setLobbyActionError(
+        error instanceof Error ? error.message : "Unable to take command."
+      );
+    }
+  };
+
   const handleRejectJoinRequest = async (request: JoinRequestWithPath) => {
     if (!firestoreDb || !activeMatch || !connectedUid || !myTeamId) {
       return;
@@ -862,6 +922,10 @@ export function LobbyPageClient() {
         }).catch(() => undefined);
       }
 
+      await upsertLeaderboardNickname(db, connectedUid, trimmedNickname).catch(
+        () => undefined
+      );
+
       setSaveState("success");
       setLastSavedAt(new Date());
       setTimeout(() => setSaveState("idle"), 2500);
@@ -909,6 +973,8 @@ export function LobbyPageClient() {
             onStartPlacement={handleStartPlacement}
             onToggleTeamLock={handleToggleTeamLock}
             onDisbandMatch={handleDisbandMatch}
+            canTakeCommand={canTakeCommand}
+            onTakeCommand={handleTakeCommand}
           />
 
           <JoinAndCreateColumn

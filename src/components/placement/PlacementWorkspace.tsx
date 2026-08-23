@@ -31,6 +31,7 @@ import {
   type PlacedShip,
 } from "@/lib/grid/placement";
 import { isGridCoordinate, type GridCoordinate } from "@/lib/grid/coordinates";
+import { usePresence } from "@/lib/presence/usePresence";
 
 type PlacementWorkspaceProps = {
   autoQuickPlay?: boolean;
@@ -75,6 +76,7 @@ export function PlacementWorkspace({
 
   const uid = auth.uid;
   const db = auth.db;
+  usePresence({ db, uid, gameId });
   const fleetReady = isFleetComplete(ships);
   const locked = lockState === "locked";
   const unplaced = unplacedTypes(ships);

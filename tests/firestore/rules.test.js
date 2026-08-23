@@ -69,6 +69,7 @@ async function run() {
     await shouldEnforceDualTeamCaptainApprovals(testEnv);
     await shouldProtectMatchmakingAndPlacement(testEnv);
     await shouldEnforceMatchLobbyRules(testEnv);
+    await shouldEnforceLeaderboardAndPresence(testEnv);
     console.log("Firestore security rules tests passed");
   } finally {
     await testEnv.cleanup();
@@ -651,6 +652,152 @@ async function shouldEnforceMatchLobbyRules(testEnv) {
     alpha.firestore().doc("matches/match-1").update({
       status: "PLACEMENT",
       gameId: "game-from-match",
+    })
+  );
+}
+
+async function shouldEnforceLeaderboardAndPresence(testEnv) {
+  await testEnv.clearFirestore();
+  await seedGame(
+    testEnv,
+    "ended-1",
+    gameFixture({
+      status: "ENDED",
+      winnerTeam: "ALPHA",
+      turnOrder: ["alpha-uid", "beta-uid"],
+      currentTurnIndex: 0,
+      placement: {
+        ALPHA: { isLocked: true },
+        BETA: { isLocked: true },
+      },
+    }),
+    teamFixture("ALPHA", "alpha-uid", { isLocked: true }),
+    teamFixture("BETA", "beta-uid", { isLocked: true })
+  );
+  await seedGame(
+    testEnv,
+    "battle-skip",
+    gameFixture({
+      status: "BATTLE",
+      turnOrder: ["alpha-uid", "beta-uid"],
+      currentTurnIndex: 0,
+      placement: {
+        ALPHA: { isLocked: true },
+        BETA: { isLocked: true },
+      },
+    }),
+    teamFixture("ALPHA", "alpha-uid", { isLocked: true }),
+    teamFixture("BETA", "beta-uid", { isLocked: true })
+  );
+
+  const alpha = testEnv.authenticatedContext("alpha-uid");
+  const beta = testEnv.authenticatedContext("beta-uid");
+  const outsider = testEnv.authenticatedContext("outsider-uid");
+  const unauth = testEnv.unauthenticatedContext();
+
+  await assertFails(unauth.firestore().doc("leaderboard/alpha-uid").get());
+  await assertSucceeds(alpha.firestore().doc("leaderboard/alpha-uid").get());
+
+  await assertSucceeds(
+    alpha.firestore().doc("leaderboard/alpha-uid").set({
+      uid: "alpha-uid",
+      nickname: "Alpha",
+      wins: 0,
+      losses: 0,
+    })
+  );
+
+  await assertFails(
+    outsider.firestore().doc("leaderboard/beta-uid").set({
+      uid: "beta-uid",
+      nickname: "Hack",
+      wins: 1,
+      losses: 0,
+      lastGameId: "ended-1",
+      lastPlayedAt: Timestamp.now(),
+    })
+  );
+
+  await assertSucceeds(
+    alpha.firestore().doc("leaderboard/alpha-uid").set({
+      uid: "alpha-uid",
+      nickname: "Alpha",
+      wins: 1,
+      losses: 0,
+      lastGameId: "ended-1",
+      lastPlayedAt: Timestamp.now(),
+    })
+  );
+  await assertSucceeds(
+    alpha.firestore().doc("leaderboard/beta-uid").set({
+      uid: "beta-uid",
+      nickname: "Beta",
+      wins: 0,
+      losses: 1,
+      lastGameId: "ended-1",
+      lastPlayedAt: Timestamp.now(),
+    })
+  );
+  await assertSucceeds(
+    alpha.firestore().doc("games/ended-1").update({
+      statsRecorded: true,
+    })
+  );
+
+  await assertFails(
+    alpha.firestore().doc("leaderboard/alpha-uid").set({
+      uid: "alpha-uid",
+      nickname: "Alpha",
+      wins: 2,
+      losses: 0,
+      lastGameId: "ended-1",
+      lastPlayedAt: Timestamp.now(),
+    })
+  );
+
+  await assertFails(
+    outsider.firestore().doc("presence/alpha-uid").set({
+      uid: "alpha-uid",
+      isConnected: true,
+      lastSeenAt: Timestamp.now(),
+    })
+  );
+  await assertSucceeds(
+    alpha.firestore().doc("presence/alpha-uid").set({
+      uid: "alpha-uid",
+      isConnected: true,
+      lastSeenAt: Timestamp.now(),
+    })
+  );
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("presence/alpha-uid").set({
+      uid: "alpha-uid",
+      isConnected: false,
+      lastSeenAt: Timestamp.fromDate(new Date(Date.now() - 45_000)),
+    });
+  });
+
+  await assertSucceeds(
+    beta.firestore().doc("games/battle-skip").update({
+      currentTurnIndex: 1,
+    })
+  );
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("games/battle-skip").update({
+      currentTurnIndex: 0,
+    });
+    await context.firestore().doc("presence/alpha-uid").set({
+      uid: "alpha-uid",
+      isConnected: true,
+      lastSeenAt: Timestamp.now(),
+    });
+  });
+
+  await assertFails(
+    beta.firestore().doc("games/battle-skip").update({
+      currentTurnIndex: 1,
     })
   );
 }

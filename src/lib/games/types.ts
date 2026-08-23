@@ -23,6 +23,8 @@ export type GameDocument = {
   turnOrder?: string[];
   currentTurnIndex?: number;
   winnerTeam?: GameTeamId;
+  /** Set once when W/L has been written to `leaderboard/{uid}`. */
+  statsRecorded?: boolean;
 };
 
 export type GameTeamDocument = {

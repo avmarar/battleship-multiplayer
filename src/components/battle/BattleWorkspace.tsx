@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { doc, onSnapshot } from "firebase/firestore";
 import { BattleGrid, type CellMark } from "@/components/grid/BattleGrid";
+import { MatchSummaryCard } from "@/components/scoreboard/MatchSummaryCard";
 import { activeShooterId } from "@/lib/games/combat";
 import { fireShot } from "@/lib/games/fireShot";
+import { skipDisconnectedTurn } from "@/lib/games/skipTurn";
 import { opponentTeam, teamForPlayer } from "@/lib/games/matchmaking";
 import {
   GAMES_COLLECTION,
@@ -16,6 +18,12 @@ import {
 } from "@/lib/games/types";
 import { useAnonymousAuth } from "@/lib/firebase/useAnonymousAuth";
 import { isGridCoordinate, type GridCoordinate } from "@/lib/grid/coordinates";
+import { recordMatchStats } from "@/lib/leaderboard/recordMatchStats";
+import { buildMatchSummary } from "@/lib/leaderboard/summary";
+import { canSkipDisconnected, skipCountdownMs } from "@/lib/presence/stale";
+import { DISCONNECT_SKIP_MS } from "@/lib/presence/types";
+import { usePresence } from "@/lib/presence/usePresence";
+import { usePresenceDoc } from "@/lib/presence/usePresenceDoc";
 
 type BattleWorkspaceProps = {
   gameId: string;
@@ -33,12 +41,17 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [firing, setFiring] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const uid = auth.uid;
   const db = auth.db;
   const shooter = game ? activeShooterId(game) : null;
   const isMyTurn = !!uid && shooter === uid;
   const ended = game?.status === "ENDED";
+  const shooterPresence = usePresenceDoc(db, ended ? null : shooter);
+
+  usePresence({ db, uid, gameId });
 
   useEffect(() => {
     if (!db || !gameId || !uid) {
@@ -85,6 +98,18 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
       unsubEnemy();
     };
   }, [db, gameId, myTeam]);
+
+  useEffect(() => {
+    const tick = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(tick);
+  }, []);
+
+  useEffect(() => {
+    if (!db || !uid || !ended || game?.statsRecorded) {
+      return;
+    }
+    void recordMatchStats(db, gameId, uid).catch(() => undefined);
+  }, [db, uid, ended, game?.statsRecorded, gameId]);
 
   const homeMarks = useMemo(() => {
     const marks: Partial<Record<GridCoordinate, CellMark>> = {};
@@ -143,6 +168,38 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
     }
   };
 
+  const handleSkip = async () => {
+    if (!db || !uid || ended || skipping || isMyTurn) {
+      return;
+    }
+    setSkipping(true);
+    setErrorMessage(null);
+    try {
+      await skipDisconnectedTurn(db, gameId, uid);
+      setStatusMessage("Disconnected shooter skipped.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to skip."
+      );
+    } finally {
+      setSkipping(false);
+    }
+  };
+
+  const summary =
+    game && myTeam
+      ? buildMatchSummary(game, myTeam, myTeamDoc, enemyTeamDoc)
+      : null;
+  const skipReady = canSkipDisconnected(
+    shooterPresence,
+    nowMs,
+    DISCONNECT_SKIP_MS
+  );
+  const skipWaitSec = Math.ceil(
+    skipCountdownMs(shooterPresence?.lastSeenAt, nowMs, DISCONNECT_SKIP_MS) /
+      1000
+  );
+
   if (auth.status === "checking") {
     return (
       <p className="text-white/70" data-testid="battle-loading">
@@ -166,6 +223,31 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
               : "Waiting for the active shooter…"}
         </p>
       </header>
+
+      {summary && <MatchSummaryCard summary={summary} />}
+
+      {!ended && !isMyTurn && shooter && (
+        <div
+          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80"
+          data-testid="skip-turn-panel"
+        >
+          {skipReady ? (
+            <button
+              type="button"
+              data-testid="skip-disconnected"
+              disabled={skipping}
+              onClick={() => void handleSkip()}
+              className="rounded-full bg-amber-300 px-4 py-2 text-sm font-semibold text-[#041218] disabled:opacity-50"
+            >
+              {skipping ? "Skipping…" : "Skip disconnected shooter"}
+            </button>
+          ) : (
+            <p data-testid="skip-countdown">
+              Shooter disconnected? Skip available in {skipWaitSec}s.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-2">
         <section className="space-y-3">
@@ -212,9 +294,20 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
       {errorMessage && (
         <p className="text-sm text-red-300">{errorMessage}</p>
       )}
-      <Link href="/lobby" className="text-sm font-semibold text-cyan-100">
-        ← Lobby
-      </Link>
+      <div className="flex flex-wrap gap-4">
+        <Link href="/lobby" className="text-sm font-semibold text-cyan-100">
+          ← Lobby
+        </Link>
+        {ended && (
+          <Link
+            href={`/scoreboard?gameId=${gameId}`}
+            className="text-sm font-semibold text-cyan-100"
+            data-testid="battle-scoreboard-link"
+          >
+            Match summary →
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

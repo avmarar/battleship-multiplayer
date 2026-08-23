@@ -147,6 +147,39 @@ export async function seedPlacementGame(
   }
 }
 
+export async function seedLeaderboardEntry(
+  request: APIRequestContext,
+  uid: string,
+  fields: { nickname: string; wins: number; losses: number; lastPlayedAt?: Date }
+) {
+  const projectId =
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "battleship-multiplayer-demo";
+  const documents = `http://127.0.0.1:8080/v1/projects/${projectId}/databases/(default)/documents`;
+  const response = await request.post(
+    `${documents}/leaderboard?documentId=${uid}`,
+    {
+      headers: {
+        Authorization: "Bearer owner",
+        "Content-Type": "application/json",
+      },
+      data: {
+        fields: {
+          uid: stringValue(uid),
+          nickname: stringValue(fields.nickname),
+          wins: { integerValue: String(fields.wins) },
+          losses: { integerValue: String(fields.losses) },
+          lastPlayedAt: timestampValue(fields.lastPlayedAt ?? new Date()),
+        },
+      },
+    }
+  );
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to seed leaderboard: ${response.status()} ${await response.text()}`
+    );
+  }
+}
+
 export async function placeStandardFleet(page: Page) {
   for (const [ship, cell] of FLEET_ORIGINS) {
     await page.getByTestId(`ship-tray-${ship}`).click();

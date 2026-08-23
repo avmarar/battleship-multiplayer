@@ -66,8 +66,12 @@ test.describe("QA-1.2 lobby create and join", () => {
       await expect(captain.getByTestId("ready-count")).toHaveText("Ready 2/2");
       await expect(captain.getByTestId("start-placement")).toBeEnabled();
       await captain.getByTestId("start-placement").click();
-      await expect(captain.getByTestId("lobby-status")).toHaveText("PLACEMENT");
-      await expect(crew.getByTestId("lobby-status")).toHaveText("PLACEMENT");
+      await expect(captain).toHaveURL(/\/placement\?gameId=/);
+      await expect(crew).toHaveURL(/\/placement\?gameId=/, { timeout: 15_000 });
+      const captainGameId = new URL(captain.url()).searchParams.get("gameId");
+      const crewGameId = new URL(crew.url()).searchParams.get("gameId");
+      expect(captainGameId).toBeTruthy();
+      expect(crewGameId).toBe(captainGameId);
     } finally {
       await captainContext.close();
       await crewContext.close();

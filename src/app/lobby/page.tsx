@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
   onAuthStateChanged,
   signInAnonymously,
@@ -46,6 +47,7 @@ import {
   generateUniqueInviteCodes,
   normalizeInviteCode,
 } from "@/lib/lobbies/utils";
+import { startLobbyGame } from "@/lib/games/startLobbyGame";
 import {
   ActiveLobbyPanel,
 } from "./components/ActiveLobbyPanel";
@@ -65,6 +67,7 @@ const namespace =
 const defaultStatusMessage = "Awaiting fleet orders.";
 
 export default function Home() {
+  const router = useRouter();
   const firebaseAvailable = isFirebaseReady();
   const firebaseAuth = firebaseAvailable ? getFirebaseAuth() : null;
   const firestoreDb = firebaseAvailable ? getFirestoreDb() : null;
@@ -309,6 +312,13 @@ export default function Home() {
     return () => unsubscribe();
   }, [firestoreDb, activeLobby, connectedUid, isTeamCaptain]);
 
+  useEffect(() => {
+    if (!activeLobby?.gameId) {
+      return;
+    }
+    router.push(`/placement?gameId=${activeLobby.gameId}`);
+  }, [activeLobby?.gameId, router]);
+
   const visibleProfile = shouldSubscribeToProfile ? profile : null;
 
   const lobbyMembers = useMemo(() => {
@@ -545,10 +555,9 @@ export default function Home() {
 
     setLobbyActionError(null);
     try {
-      await updateDoc(doc(firestoreDb, "lobbies", activeLobby.id), {
-        status: "PLACEMENT",
-      });
-      setLobbyActionMessage("Lobby advanced to placement.");
+      const { gameId } = await startLobbyGame(firestoreDb, activeLobby);
+      setLobbyActionMessage("Match created. Opening placement…");
+      router.push(`/placement?gameId=${gameId}`);
     } catch (error) {
       const message =
         error instanceof Error

@@ -64,13 +64,14 @@ test.describe("QA-3.1 Quick Play placement lock", () => {
 
       await beta.getByTestId("lock-placement").click();
 
-      await expect(alpha.getByTestId("both-locked")).toBeVisible({
-        timeout: 10_000,
+      await expect(alpha).toHaveURL(/\/game\?gameId=e2e-placement/, {
+        timeout: 15_000,
       });
-      await expect(beta.getByTestId("both-locked")).toBeVisible();
-      await expect(alpha.getByTestId("placement-status")).toContainText(
-        "Waiting for opponent"
-      );
+      await expect(beta).toHaveURL(/\/game\?gameId=e2e-placement/, {
+        timeout: 15_000,
+      });
+      await expect(alpha.getByTestId("battle-workspace")).toBeVisible();
+      await expect(beta.getByTestId("battle-workspace")).toBeVisible();
     } finally {
       await alphaContext.close();
       await betaContext.close();

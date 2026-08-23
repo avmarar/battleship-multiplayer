@@ -1,16 +1,31 @@
-import Link from "next/link";
+import { BattleWorkspace } from "@/components/battle/BattleWorkspace";
 
-export default function GamePage() {
+export default async function GamePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ gameId?: string }>;
+}) {
+  const params = await searchParams;
+  const gameId = params.gameId;
+
+  if (!gameId) {
+    return (
+      <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-12 text-white">
+        <main className="mx-auto max-w-3xl space-y-4">
+          <h1 className="text-3xl font-semibold">Battle</h1>
+          <p className="text-white/70">
+            Open a match from placement after both fleets lock, or pass{" "}
+            <code className="text-cyan-100">?gameId=</code>.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-12 text-white">
-      <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 rounded-3xl border border-white/5 bg-white/[0.04] p-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">Game · Stub</p>
-        <h1 className="text-3xl font-semibold">Battle Loop Workspace</h1>
-        <p className="text-white/70">
-          Turn sequencing, firing validation, and synchronized hit/miss UI land
-          in Sprint 5. Placement lock from Sprint 3 is the handoff into this workspace.
-        </p>
-        <Link href="/" className="text-sm font-semibold text-cyan-100">← Back to Hub</Link>
+    <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-10 text-white">
+      <main className="mx-auto w-full max-w-5xl">
+        <BattleWorkspace gameId={gameId} />
       </main>
     </div>
   );

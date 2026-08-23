@@ -220,15 +220,20 @@ service cloud.firestore {
 
     function gameCreateValid(data) {
       return (data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement', 'createdAt']) ||
-          data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement'])) &&
+          data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement']) ||
+          data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement', 'createdAt', 'lobbyId']) ||
+          data.keys().hasOnly(['status', 'memberIds', 'teams', 'placement', 'lobbyId'])) &&
         data.status == 'PLACEMENT' &&
-        data.memberIds is list && data.memberIds.size() == 2 &&
+        data.memberIds is list && data.memberIds.size() >= 2 &&
         request.auth.uid in data.memberIds &&
         (!data.keys().hasAny(['createdAt']) || data.createdAt is timestamp) &&
+        (!data.keys().hasAny(['lobbyId']) || (data.lobbyId is string && data.lobbyId.size() > 0)) &&
         data.placement.ALPHA.isLocked == false &&
         data.placement.BETA.isLocked == false &&
         data.teams.ALPHA.captainId is string &&
-        data.teams.BETA.captainId is string;
+        data.teams.BETA.captainId is string &&
+        data.teams.ALPHA.memberIds is list && data.teams.ALPHA.memberIds.size() >= 1 &&
+        data.teams.BETA.memberIds is list && data.teams.BETA.memberIds.size() >= 1;
     }
 
     function gamePlayerTeam() {
@@ -241,13 +246,58 @@ service cloud.firestore {
       let team = gamePlayerTeam();
       let other = team == 'ALPHA' ? 'BETA' : 'ALPHA';
       return team != '' &&
-        request.resource.data.status == resource.data.status &&
+        resource.data.status == 'PLACEMENT' &&
+        request.resource.data.status == 'PLACEMENT' &&
         request.resource.data.memberIds == resource.data.memberIds &&
         request.resource.data.teams == resource.data.teams &&
         request.resource.data.createdAt == resource.data.createdAt &&
         resource.data.placement[team].isLocked == false &&
         request.resource.data.placement[team].isLocked == true &&
         request.resource.data.placement[other].isLocked == resource.data.placement[other].isLocked;
+    }
+
+    function gameBattleStartValid() {
+      let team = gamePlayerTeam();
+      let other = team == 'ALPHA' ? 'BETA' : 'ALPHA';
+      return team != '' &&
+        resource.data.status == 'PLACEMENT' &&
+        request.resource.data.status == 'BATTLE' &&
+        resource.data.placement[other].isLocked == true &&
+        resource.data.placement[team].isLocked == false &&
+        request.resource.data.placement[team].isLocked == true &&
+        request.resource.data.placement[other].isLocked == true &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.teams == resource.data.teams &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.turnOrder is list &&
+        request.resource.data.turnOrder.size() >= 2 &&
+        request.resource.data.currentTurnIndex == 0;
+    }
+
+    function gameTurnAdvanceOrEndValid() {
+      return request.auth.uid in resource.data.memberIds &&
+        resource.data.status == 'BATTLE' &&
+        resource.data.turnOrder is list &&
+        resource.data.turnOrder.size() > 0 &&
+        resource.data.currentTurnIndex is number &&
+        resource.data.turnOrder[resource.data.currentTurnIndex] == request.auth.uid &&
+        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.teams == resource.data.teams &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.placement == resource.data.placement &&
+        request.resource.data.turnOrder == resource.data.turnOrder &&
+        (
+          (
+            request.resource.data.status == 'BATTLE' &&
+            request.resource.data.currentTurnIndex is number &&
+            request.resource.data.currentTurnIndex != resource.data.currentTurnIndex
+          ) ||
+          (
+            request.resource.data.status == 'ENDED' &&
+            request.resource.data.winnerTeam in ['ALPHA', 'BETA'] &&
+            request.resource.data.currentTurnIndex == resource.data.currentTurnIndex
+          )
+        );
     }
 
     match /games/{gameId} {
@@ -257,7 +307,7 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() &&
         request.auth.uid in resource.data.memberIds &&
-        gameLockUpdateValid();
+        (gameLockUpdateValid() || gameBattleStartValid() || gameTurnAdvanceOrEndValid());
     }
 
     match /games/{gameId}/teams/{teamId} {
@@ -275,7 +325,8 @@ service cloud.firestore {
         return isParentMember() && request.auth.uid in parentGame().teams[teamId].memberIds;
       }
 
-      allow read: if isTeamMember();
+      allow read: if isTeamMember() ||
+        (isParentMember() && parentGame().status in ['BATTLE', 'ENDED']);
 
       allow create: if isParentMember() &&
         request.resource.data.teamId == teamId &&
@@ -283,11 +334,16 @@ service cloud.firestore {
         request.resource.data.ships is list &&
         request.resource.data.shotsFired is list;
 
-      allow update: if isTeamMember() &&
+      allow update: if (isTeamMember() &&
         resource.data.isLocked == false &&
         request.resource.data.teamId == resource.data.teamId &&
         request.resource.data.memberIds == resource.data.memberIds &&
-        request.resource.data.shotsFired == resource.data.shotsFired;
+        request.resource.data.shotsFired == resource.data.shotsFired) ||
+        (isParentMember() &&
+          parentGame().status in ['BATTLE', 'ENDED'] &&
+          request.resource.data.teamId == resource.data.teamId &&
+          request.resource.data.memberIds == resource.data.memberIds &&
+          request.resource.data.isLocked == resource.data.isLocked);
     }
   }
 }

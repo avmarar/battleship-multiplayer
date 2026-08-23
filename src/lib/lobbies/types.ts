@@ -21,6 +21,8 @@ export type LobbyDocument = {
   captainId: string;
   /** Set when the first Beta member is approved as team captain. */
   captainIdBeta?: string;
+  /** Set when Start Placement creates the shared games/{id} document. */
+  gameId?: string;
   status: LobbyStatus;
   isLocked: boolean;
   maxMembers: number;

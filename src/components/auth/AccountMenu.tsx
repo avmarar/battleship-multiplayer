@@ -9,6 +9,8 @@ import {
 import { useAnonymousAuth } from "@/lib/firebase/useAnonymousAuth";
 import { stampAccountType } from "@/lib/profile/accountType";
 import { useToast } from "@/components/feedback/ToastProvider";
+import { HudButton } from "@/components/ui/HudButton";
+import { HudPanel } from "@/components/ui/HudPanel";
 
 export function AccountMenu() {
   const auth = useAnonymousAuth();
@@ -21,6 +23,8 @@ export function AccountMenu() {
   if (auth.status === "unavailable" || auth.status === "checking") {
     return null;
   }
+
+  const isRegistered = auth.status === "connected" && !auth.isAnonymous && auth.email;
 
   const handleRegister = async (event: FormEvent) => {
     event.preventDefault();
@@ -88,51 +92,71 @@ export function AccountMenu() {
   };
 
   return (
-    <div className="relative ml-auto">
-      <button
-        type="button"
+    <div className="relative">
+      <HudButton
         data-testid="account-menu"
+        variant={isRegistered ? "gold" : "ghost"}
+        className="max-w-[11rem] truncate px-3 py-1 text-xs tracking-normal normal-case md:text-sm font-mono shadow-sm"
         onClick={() => setOpen((value) => !value)}
-        className="rounded-full border border-white/20 px-3 py-1.5 text-sm font-semibold text-cyan-100 hover:border-white/40"
       >
-        {auth.status === "connected" && !auth.isAnonymous && auth.email
-          ? auth.email
-          : "Guest"}
-      </button>
+        <span className="truncate">
+          {isRegistered ? `★ ${auth.email}` : "👤 Guest Officer"}
+        </span>
+      </HudButton>
+
       {open && (
-        <div
-          className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-white/10 bg-[#0b1220] p-4 shadow-xl"
+        <HudPanel
+          corners
+          tone={isRegistered ? "gold" : "accent"}
+          className="absolute right-0 z-50 mt-2 w-80 p-5 shadow-[0_15px_40px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 duration-150"
           data-testid="account-panel"
         >
-          {auth.status === "connected" && !auth.isAnonymous ? (
-            <div className="space-y-3">
-              <p className="text-sm text-white/70">
-                Signed in as{" "}
-                <span className="font-semibold text-white">{auth.email}</span>
+          {isRegistered ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+                <span className="text-xl">🎖️</span>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] font-mono text-amber-300">
+                    AUTHENTICATED OFFICER
+                  </p>
+                  <p className="font-bold text-white truncate text-sm">{auth.email}</p>
+                </div>
+              </div>
+              <p className="text-xs text-white/70">
+                Your combat records and win/loss ratio are permanently saved to the global leaderboard.
               </p>
-              <button
-                type="button"
+              <HudButton
                 data-testid="account-sign-out"
                 disabled={busy}
+                variant="secondary"
+                fullWidth
                 onClick={() => void handleSignOut()}
-                className="w-full rounded-full border border-white/20 px-3 py-2 text-sm font-semibold text-white"
               >
-                Sign out
-              </button>
+                Sign out to Guest
+              </HudButton>
             </div>
           ) : (
-            <form className="space-y-3" onSubmit={(event) => void handleRegister(event)}>
-              <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">
-                Persistent login
-              </p>
+            <form
+              className="space-y-3.5"
+              onSubmit={(event) => void handleRegister(event)}
+            >
+              <div className="border-b border-white/10 pb-2.5">
+                <p className="text-xs uppercase tracking-[0.2em] font-mono text-cyan-200">
+                  PERSISTENT LOGIN & RANK
+                </p>
+                <p className="text-xs text-white/60 mt-0.5">
+                  Save your call sign on the scoreboard
+                </p>
+              </div>
+
               <input
                 type="email"
                 name="email"
                 data-testid="account-email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="Email"
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
+                placeholder="Email address"
+                className="min-h-[42px] w-full rounded-[var(--radius-hud)] border border-cyan-500/30 bg-black/40 px-3.5 py-2 text-sm text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_12px_rgba(0,242,254,0.25)]"
               />
               <input
                 type="password"
@@ -140,31 +164,31 @@ export function AccountMenu() {
                 data-testid="account-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Password (6+)"
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
+                placeholder="Password (6+ characters)"
+                className="min-h-[42px] w-full rounded-[var(--radius-hud)] border border-cyan-500/30 bg-black/40 px-3.5 py-2 text-sm text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_12px_rgba(0,242,254,0.25)]"
               />
-              <div className="flex gap-2">
-                <button
+              <div className="flex gap-2 pt-1">
+                <HudButton
                   type="submit"
                   data-testid="account-register"
                   disabled={busy}
-                  className="flex-1 rounded-full bg-[#00CED1] px-3 py-2 text-sm font-semibold text-[#041218]"
+                  className="flex-1 px-3 text-xs"
                 >
-                  Save account
-                </button>
-                <button
-                  type="button"
+                  Save Account
+                </HudButton>
+                <HudButton
                   data-testid="account-sign-in"
                   disabled={busy}
+                  variant="ghost"
+                  className="flex-1 px-3 text-xs"
                   onClick={() => void handleSignIn()}
-                  className="flex-1 rounded-full border border-white/20 px-3 py-2 text-sm font-semibold text-white"
                 >
-                  Sign in
-                </button>
+                  Sign In
+                </HudButton>
               </div>
             </form>
           )}
-        </div>
+        </HudPanel>
       )}
     </div>
   );

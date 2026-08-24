@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { BattleGrid, type CellMark } from "@/components/grid/BattleGrid";
+import { CommandShell } from "@/components/layout/CommandShell";
 import { ShipTray } from "@/components/placement/ShipTray";
+import { HudButton } from "@/components/ui/HudButton";
+import { HudPanel } from "@/components/ui/HudPanel";
+import { ShipMark } from "@/components/visual/ShipMark";
 import { isTeamCaptain } from "@/lib/games/captain";
 import { lockPlacement } from "@/lib/games/lockPlacement";
 import { saveDraftFleet } from "@/lib/games/saveDraftFleet";
@@ -24,6 +28,7 @@ import {
   type GameTeamId,
 } from "@/lib/games/types";
 import { useAnonymousAuth } from "@/lib/firebase/useAnonymousAuth";
+import { findActiveGame } from "@/lib/presence/findActiveGame";
 import { FLEET, fleetEntry, type Orientation, type ShipType } from "@/lib/grid/fleet";
 import { draftSignature, fromLockedPayload } from "@/lib/grid/draft";
 import {
@@ -52,6 +57,8 @@ type DragState = {
 
 type MatchState = "idle" | "searching" | "matched";
 type LockUiState = "idle" | "locking" | "locked" | "error";
+
+const ACTIVE_GAME_STORAGE_KEY = "battleship_active_game_id";
 
 export function PlacementWorkspace({
   autoQuickPlay = false,
@@ -99,6 +106,67 @@ export function PlacementWorkspace({
   shipsRef.current = ships;
   lockedRef.current = locked;
 
+  // Persist matched game ID and update browser URL so page refreshes never drop into Sandbox mode
+  useEffect(() => {
+    if (!gameId || typeof window === "undefined") {
+      return;
+    }
+    try {
+      sessionStorage.setItem(ACTIVE_GAME_STORAGE_KEY, gameId);
+      const currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.get("gameId") !== gameId) {
+        currentUrl.searchParams.set("gameId", gameId);
+        currentUrl.searchParams.delete("quickPlay");
+        window.history.replaceState(null, "", currentUrl.toString());
+      }
+    } catch {
+      // Storage unavailable or blocked
+    }
+  }, [gameId]);
+
+  // Reconnect / recover active game on refresh or initial connect
+  useEffect(() => {
+    if (gameId || !db || !uid) {
+      return;
+    }
+
+    let isMounted = true;
+
+    // 1. Try session storage first
+    try {
+      const storedId = sessionStorage.getItem(ACTIVE_GAME_STORAGE_KEY);
+      if (storedId) {
+        setGameId(storedId);
+        setMatchState("matched");
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Query active match from Firestore
+    void findActiveGame(db, uid)
+      .then((active) => {
+        if (!isMounted || !active) {
+          return;
+        }
+        if (active.status === "BATTLE" || active.status === "ENDED") {
+          router.replace(`/game?gameId=${active.id}`);
+          return;
+        }
+        if (active.status === "PLACEMENT") {
+          setGameId(active.id);
+          setMatchState("matched");
+          setStatusMessage("Active match restored. Place your fleet.");
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [db, uid, gameId, router]);
+
   const preview = useMemo(() => {
     if (!drag || !hoverOrigin) {
       return null;
@@ -107,12 +175,12 @@ export function PlacementWorkspace({
     const coordinates = projectShip(hoverOrigin, drag.orientation, size);
     const valid = coordinates
       ? !!buildPlacedShip(
-          drag.type,
-          hoverOrigin,
-          drag.orientation,
-          ships,
-          drag.type
-        )
+        drag.type,
+        hoverOrigin,
+        drag.orientation,
+        ships,
+        drag.type
+      )
       : false;
     return { coordinates, valid };
   }, [drag, hoverOrigin, ships]);
@@ -123,7 +191,7 @@ export function PlacementWorkspace({
       if (drag && ship.id === drag.type) {
         continue;
       }
-      const mark = ship.id === selectedId ? "ship-selected" : "ship";
+      const mark: CellMark = ship.id === selectedId ? "ship-selected" : "ship";
       for (const coordinate of ship.coordinates) {
         next[coordinate] = mark;
       }
@@ -172,6 +240,11 @@ export function PlacementWorkspace({
       (snapshot) => {
         if (!snapshot.exists()) {
           setErrorMessage("Match was closed.");
+          try {
+            sessionStorage.removeItem(ACTIVE_GAME_STORAGE_KEY);
+          } catch {
+            // ignore
+          }
           return;
         }
         const data = snapshot.data() as GameDocument;
@@ -182,7 +255,17 @@ export function PlacementWorkspace({
           setLockState("locked");
         }
         if (data.status === "BATTLE" || data.status === "ENDED") {
-          router.push(`/game?gameId=${gameId}`);
+          try {
+            sessionStorage.setItem(ACTIVE_GAME_STORAGE_KEY, gameId);
+          } catch {
+            // ignore
+          }
+          router.replace(`/game?gameId=${gameId}`);
+          window.setTimeout(() => {
+            if (typeof window !== "undefined" && window.location.pathname !== "/game") {
+              window.location.assign(`/game?gameId=${gameId}`);
+            }
+          }, 300);
         }
       },
       (error) => setErrorMessage(error.message)
@@ -340,10 +423,10 @@ export function PlacementWorkspace({
       setDrag((current) =>
         current
           ? {
-              ...current,
-              orientation:
-                current.orientation === "HORIZONTAL" ? "VERTICAL" : "HORIZONTAL",
-            }
+            ...current,
+            orientation:
+              current.orientation === "HORIZONTAL" ? "VERTICAL" : "HORIZONTAL",
+          }
           : current
       );
       setOrientation((current) =>
@@ -486,184 +569,265 @@ export function PlacementWorkspace({
   }
 
   const draggingShip = drag ? fleetEntry(drag.type) : null;
+  const overlayShips = ships.filter((ship) => !(drag && ship.id === drag.type));
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-12 text-white">
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <header className="space-y-3 rounded-3xl border border-white/5 bg-white/5 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
-            Placement
-          </p>
-          <h1 className="text-3xl font-semibold">Place your fleet</h1>
-          <p className="max-w-2xl text-white/70">
-            Crew can drag and rotate together. Only the team captain locks the
-            fleet when all five vessels are legal.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/" className="inline-flex text-sm font-semibold text-cyan-100">
-              ← Back to Hub
-            </Link>
-            {matchState === "idle" && (
-              <button
-                type="button"
-                data-testid="quick-play"
-                onClick={() => void startQuickPlay()}
-                className="rounded-full bg-[#00CED1] px-5 py-2 text-sm font-semibold text-[#041218] transition hover:brightness-110 active:scale-90"
-              >
-                Quick Play
-              </button>
-            )}
-            {matchState === "searching" && (
-              <button
-                type="button"
-                onClick={() => void handleCancelSearch()}
-                className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white hover:border-white/40"
-              >
-                Cancel search
-              </button>
-            )}
+    <CommandShell variant="placement">
+      {/* Header Banner */}
+      <HudPanel corners tone="accent" className="space-y-4 p-6 sm:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+            <p className="text-xs uppercase tracking-[0.3em] font-mono text-cyan-200">
+              DEPLOYMENT PHASE · BLUEPRINT DRAFT
+            </p>
           </div>
-          {auth.status === "checking" && (
-            <p className="text-sm text-white/60" data-testid="auth-pending">
-              Signing in anonymously…
-            </p>
-          )}
-          {auth.status === "connected" && auth.uid ? (
-            <p className="font-mono text-xs text-white/60">
-              UID <span data-testid="auth-uid">{auth.uid}</span>
-            </p>
-          ) : null}
-          {auth.status === "error" || auth.status === "unavailable" ? (
-            <p className="text-sm text-red-300">{auth.message}</p>
-          ) : null}
-        </header>
-
-        <div
-          className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 text-sm text-cyan-50"
-          data-testid="match-status"
-        >
-          Placement Phase: Drag and Rotate Ships.
-          {matchState === "searching" ? " Searching for opponent…" : null}
-          {matchState === "matched" && myTeam ? ` You are Team ${myTeam}.` : null}
         </div>
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="space-y-4">
-            <div
-              className="rounded-3xl border border-white/5 bg-white/[0.04] p-4 sm:p-6"
-              onPointerDown={handleGridPointerDown}
+        <div className="max-w-2xl space-y-2">
+          <h1 className="text-3xl font-black uppercase tracking-[0.04em] text-white sm:text-4xl">
+            Place your armada
+          </h1>
+          <p className="text-sm text-white/75 leading-relaxed">
+            Drag vessels from the armory dock onto your home grid. Crew members can adjust placement collaboratively before the team captain locks the fleet.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 pt-2">
+          {matchState === "idle" && (
+            <HudButton
+              data-testid="quick-play"
+              onClick={() => void startQuickPlay()}
             >
-              <p className="mb-4 text-xs uppercase tracking-[0.3em] text-cyan-100">
-                Home Grid
-              </p>
-              <BattleGrid marks={marks} onSelect={handleSelectCell} disabled={locked} />
-            </div>
-            <div className="rounded-3xl border border-white/5 bg-white/[0.04] p-4 sm:p-6">
-              <ShipTray
-                unplaced={unplaced}
-                selectedType={
-                  selectedId && unplaced.includes(selectedId) ? selectedId : null
-                }
-                orientation={drag?.orientation ?? orientation}
-                disabled={locked}
-                onSelect={setSelectedId}
-                onDragStart={startDrag}
-              />
-            </div>
+              ⚡ Quick Play
+            </HudButton>
+          )}
+          {matchState === "searching" && (
+            <HudButton variant="ghost" onClick={() => void handleCancelSearch()}>
+              Cancel search
+            </HudButton>
+          )}
+        </div>
+
+        {auth.status === "checking" && (
+          <p className="text-sm text-white/60" data-testid="auth-pending">
+            Signing in anonymously…
+          </p>
+        )}
+        {auth.status === "error" || auth.status === "unavailable" ? (
+          <p className="text-sm text-red-300">{auth.message}</p>
+        ) : null}
+      </HudPanel>
+
+      {/* Match Status Banner */}
+      <div
+        className="flex items-center justify-between rounded-[var(--radius-hud)] border border-cyan-400/30 bg-gradient-to-r from-cyan-950/40 via-[#071324]/90 to-cyan-950/30 px-5 py-3.5 text-sm font-medium text-cyan-100 shadow-[0_0_20px_rgba(0,242,254,0.1)]"
+        data-testid="match-status"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#00f2fe]" />
+          <span>
+            Placement Phase: Drag and Rotate Ships.
+            {matchState === "searching" ? " Searching for opponent…" : null}
+            {matchState === "matched" && myTeam ? ` You are Team ${myTeam}.` : null}
+          </span>
+        </div>
+        {gameId ? (
+          <span className="font-mono text-xs text-white/50">
+            SESSION: {gameId.slice(0, 8)}…
+          </span>
+        ) : (
+          <span className="font-mono text-xs text-amber-300/80">SANDBOX MODE</span>
+        )}
+      </div>
+
+      {/* Full-Width Armada Dock */}
+      <HudPanel corners className="p-5 sm:p-6 w-full">
+        <ShipTray
+          unplaced={unplaced}
+          selectedType={
+            selectedId && unplaced.includes(selectedId) ? selectedId : null
+          }
+          orientation={drag?.orientation ?? orientation}
+          disabled={locked}
+          draggingType={drag?.type ?? null}
+          onSelect={setSelectedId}
+          onDragStart={startDrag}
+        />
+      </HudPanel>
+
+      {/* Main Placement Arena */}
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* Left: Home Sector Grid */}
+        <HudPanel
+          corners
+          className="p-5 sm:p-7"
+          onPointerDown={handleGridPointerDown}
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-xs uppercase tracking-[0.3em] font-mono text-cyan-200">
+              HOME SECTOR DEFENSE GRID (10x10)
+            </p>
+            <span className="text-[11px] font-mono text-white/50">
+              CLICK CELL OR DRAG VESSEL
+            </span>
           </div>
 
-          <aside className="space-y-4 rounded-3xl border border-white/5 bg-white/[0.04] p-6">
+          <div className="relative overflow-hidden rounded-lg">
+            <BattleGrid
+              marks={marks}
+              ships={overlayShips}
+              selectedShipId={selectedId}
+              onSelect={handleSelectCell}
+              disabled={locked}
+            />
+          </div>
+        </HudPanel>
+
+        {/* Right: Fleet Telemetry & Controls */}
+        <div className="space-y-5">
+          <HudPanel corners className="space-y-5 p-6">
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-cyan-100">
-                Fleet status
+              <p className="text-xs uppercase tracking-[0.3em] font-mono text-cyan-200">
+                FLEET READINESS
               </p>
-              <p className="mt-2 text-2xl font-semibold" data-testid="fleet-count">
-                {ships.length}/{FLEET.length} placed
-              </p>
-              {opponentLocked ? (
-                <p
-                  className="mt-2 text-sm font-semibold text-[#32CD32]"
-                  data-testid="opponent-ready"
-                >
-                  Opponent Ready
+              <div className="mt-2 flex items-baseline justify-between">
+                <p className="text-2xl font-black text-white font-mono" data-testid="fleet-count">
+                  {ships.length}/{FLEET.length} placed
                 </p>
+                <span className="text-xs font-mono text-cyan-300">
+                  {Math.round((ships.length / FLEET.length) * 100)}% COMPLETE
+                </span>
+              </div>
+
+              {/* Progress visual bar */}
+              <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-black/60 border border-white/10">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 shadow-[0_0_10px_#00f2fe] transition-all duration-300"
+                  style={{ width: `${(ships.length / FLEET.length) * 100}%` }}
+                />
+              </div>
+
+              {opponentLocked ? (
+                <div className="mt-3.5 flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-950/30 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#00f5a0]" />
+                  <span data-testid="opponent-ready">Opponent Ready</span>
+                </div>
               ) : gameId ? (
-                <p className="mt-2 text-sm text-white/60">Opponent placing…</p>
+                <p className="mt-3 text-xs font-mono text-white/60">Opponent placing…</p>
               ) : (
-                <p className="mt-2 text-sm text-white/60">Sandbox mode</p>
+                <p className="mt-3 text-xs font-mono text-white/60">Sandbox mode</p>
               )}
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleRotate}
-                disabled={locked}
-                className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40 disabled:opacity-50"
-              >
-                Rotate
-              </button>
-              <button
-                type="button"
-                onClick={handleReturnToTray}
-                disabled={locked || !selectedShip}
-                className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:border-white/40 disabled:opacity-50"
-              >
-                Return to tray
-              </button>
+          </HudPanel>
+          <HudPanel corners className="space-y-5 p-6">
+            {/* Controls */}
+            <div className="space-y-2 pt-2">
+              <p className="text-xs uppercase tracking-[0.3em] font-mono text-cyan-200">
+                VESSEL MANEUVERS
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <HudButton
+                  variant="secondary"
+                  data-testid="rotate-button"
+                  onClick={handleRotate}
+                  disabled={locked}
+                  className="text-xs"
+                >
+                  ↻ ROTATE (R)
+                </HudButton>
+                <HudButton
+                  variant="ghost"
+                  data-testid="return-tray-button"
+                  onClick={handleReturnToTray}
+                  disabled={locked || !selectedShip}
+                  className="text-xs"
+                >
+                  ↩ RETURN TO TRAY
+                </HudButton>
+              </div>
             </div>
 
-            <button
-              type="button"
-              data-testid="lock-placement"
-              onClick={() => void handleLock()}
-              disabled={
-                !fleetReady ||
-                locked ||
-                lockState === "locking" ||
-                (!!gameId && !myTeam) ||
-                (!!gameId && !canLock)
-              }
-              className="w-full rounded-full bg-[#00CED1] px-5 py-3 text-sm font-semibold text-[#041218] transition hover:brightness-110 active:scale-90 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40 disabled:hover:brightness-100"
-            >
-              {lockState === "locking"
-                ? "Locking…"
-                : locked
-                  ? "Placement locked"
-                  : gameId && !canLock
-                    ? "Waiting for captain"
-                    : "Lock Placement"}
-            </button>
+            {/* Captain Lock Button */}
+            <div className="pt-2">
+              <HudButton
+                data-testid="lock-placement"
+                fullWidth
+                variant={fleetReady && !locked ? "primary" : "ghost"}
+                onClick={() => void handleLock()}
+                disabled={
+                  !fleetReady ||
+                  locked ||
+                  lockState === "locking" ||
+                  (!!gameId && !myTeam) ||
+                  (!!gameId && !canLock)
+                }
+              >
+                {lockState === "locking"
+                  ? "Locking…"
+                  : locked
+                    ? "✓ Placement Locked"
+                    : gameId && !canLock
+                      ? "Waiting for Captain"
+                      : "🔒 Lock Placement"}
+              </HudButton>
+            </div>
 
-            {bothLocked && (
-              <p
-                className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"
+            {(bothLocked || game?.status === "BATTLE") && (
+              <div
+                className="space-y-3 rounded-[var(--radius-hud)] border border-emerald-400/50 bg-emerald-950/50 p-4 text-xs font-semibold text-emerald-200 shadow-[0_0_20px_rgba(0,245,160,0.3)] animate-pulse"
                 data-testid="both-locked"
               >
-                Both fleets are locked. Waiting for the battle phase.
-              </p>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#00f5a0]" />
+                  <span>Both fleets locked! Tactical battle commencing…</span>
+                </div>
+                {gameId && (
+                  <Link
+                    href={`/game?gameId=${gameId}`}
+                    className="inline-flex w-full min-h-[40px] items-center justify-center rounded-[var(--radius-hud)] bg-gradient-to-r from-emerald-400 to-teal-300 px-4 py-2 text-xs font-black uppercase tracking-wider text-black shadow-[0_0_15px_rgba(0,245,160,0.5)] transition hover:brightness-110 active:scale-95"
+                  >
+                    ⚡ Enter Fire Control Room →
+                  </Link>
+                )}
+              </div>
             )}
             {statusMessage && (
-              <p className="text-sm text-emerald-300" data-testid="placement-status">
+              <p className="text-xs font-mono text-emerald-300" data-testid="placement-status">
                 {statusMessage}
               </p>
             )}
             {errorMessage && (
-              <p className="text-sm text-red-300">{errorMessage}</p>
+              <p className="text-xs font-mono text-rose-300">{errorMessage}</p>
             )}
-          </aside>
-        </section>
-      </main>
+          </HudPanel>
+        </div>
+      </section>
 
+      {auth.status === "connected" && auth.uid ? (
+        <p className="font-mono text-[10px] text-white/30">
+          COMMANDER UID: <span data-testid="auth-uid">{auth.uid}</span>
+        </p>
+      ) : null}
+
+      {/* Dragging Ghost Pip */}
       {drag && draggingShip ? (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-50 rounded-xl border border-cyan-300/60 bg-[#0b1220]/90 px-3 py-2 text-xs font-semibold text-cyan-100 shadow-lg"
-          style={{ left: drag.x + 12, top: drag.y + 12 }}
+          className="pointer-events-none fixed z-50 rounded-[var(--radius-hud)] border border-cyan-300/80 bg-[#060e1c]/95 p-3 text-xs font-bold text-cyan-100 shadow-[0_0_25px_rgba(0,242,254,0.5)] backdrop-blur-md"
+          style={{ left: drag.x + 16, top: drag.y + 16 }}
         >
-          {draggingShip.name} · {drag.orientation === "HORIZONTAL" ? "H" : "V"}
+          <ShipMark
+            type={drag.type}
+            orientation={drag.orientation}
+            lifting
+            size="sm"
+          />
+          <span className="mt-1.5 block font-mono text-[11px] uppercase tracking-wider text-cyan-200">
+            {draggingShip.name} · {drag.orientation === "HORIZONTAL" ? "H" : "V"}
+          </span>
         </div>
       ) : null}
-    </div>
+    </CommandShell>
   );
 }

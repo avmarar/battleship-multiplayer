@@ -1,4 +1,6 @@
 import type { FormEvent } from "react";
+import { HudButton } from "@/components/ui/HudButton";
+import { HudPanel } from "@/components/ui/HudPanel";
 
 type ProfileFormCardProps = {
   uid: string | null;
@@ -26,28 +28,33 @@ export function ProfileFormCard({
   errorMessage,
 }: ProfileFormCardProps) {
   return (
-    <section className="rounded-3xl border border-white/5 bg-[#040a1c]/80 p-6 shadow-xl shadow-black/40">
+    <HudPanel corners className="p-6 sm:p-7">
       <form onSubmit={onSubmit} className="space-y-6">
-        <div className="space-y-2">
-          <p className="text-sm uppercase tracking-[0.3em] text-cyan-100">
-            Call sign
-          </p>
-          <h2 className="text-2xl font-semibold text-white">
-            Configure your session identity
+        <div className="space-y-2 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-cyan-400" />
+            <p className="text-xs uppercase tracking-[0.3em] font-mono text-cyan-200">
+              COMMANDER PROFILE · CALL SIGN
+            </p>
+          </div>
+          <h2 className="text-2xl font-black uppercase tracking-[0.04em] text-white">
+            Session Identity
           </h2>
           {uid ? (
-            <p className="font-mono text-xs text-white/60">
-              UID{" "}
-              <span data-testid="auth-uid">{uid}</span>
+            <p className="font-mono text-xs text-white/50">
+              AUTHENTICATED UID: <span data-testid="auth-uid" className="text-cyan-300 font-bold">{uid}</span>
             </p>
           ) : (
-            <p className="text-xs text-white/50" data-testid="auth-pending">
+            <p className="text-xs text-white/50 font-mono" data-testid="auth-pending">
               Signing in anonymously…
             </p>
           )}
         </div>
+
         <label className="flex flex-col gap-2">
-          <span className="text-sm text-white/70">Nickname *</span>
+          <span className="text-xs font-mono uppercase tracking-wider text-cyan-200">
+            COMMANDER CALL SIGN *
+          </span>
           <input
             type="text"
             name="nickname"
@@ -55,41 +62,44 @@ export function ProfileFormCard({
             value={nickname}
             onChange={(event) => onNicknameChange(event.target.value)}
             placeholder="Guest name is assigned automatically"
-            className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+            className="min-h-[46px] rounded-[var(--radius-hud)] border border-cyan-500/30 bg-black/40 px-4 py-3 text-white outline-none transition-all focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(0,242,254,0.3)] placeholder:text-sm placeholder:text-white/30 font-semibold"
           />
         </label>
+
         <label className="flex flex-col gap-2">
-          <span className="text-sm text-white/70">Status Message</span>
+          <span className="text-xs font-mono uppercase tracking-wider text-cyan-200">
+            TACTICAL BROADCAST / STATUS MESSAGE
+          </span>
           <textarea
             value={statusMessage}
             onChange={(event) => onStatusChange(event.target.value)}
-            rows={4}
-            className="resize-none rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+            rows={3}
+            className="resize-none rounded-[var(--radius-hud)] border border-white/15 bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(0,242,254,0.2)]"
           />
         </label>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
+
+        <div className="flex flex-wrap items-center gap-3 pt-2">
+          <HudButton
             type="submit"
             data-testid="profile-save"
             disabled={!canSubmit || saveState === "saving"}
-            className="inline-flex items-center rounded-full bg-linear-to-r from-cyan-400 to-emerald-400 px-6 py-2 font-semibold text-[#04101b] outline-none transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saveState === "saving"
               ? "Saving…"
               : saveState === "success"
-                ? "Saved!"
-                : "Update Profile"}
-          </button>
+                ? "✓ Profile Updated!"
+                : "💾 Update Profile"}
+          </HudButton>
           {lastSavedAt && (
-            <span className="text-xs text-white/60" data-testid="profile-saved">
+            <span className="text-xs font-mono text-white/60" data-testid="profile-saved">
               Last saved {lastSavedAt.toLocaleTimeString()}
             </span>
           )}
         </div>
         {errorMessage && (
-          <p className="text-sm text-red-300">{errorMessage}</p>
+          <p className="text-xs font-mono text-rose-300">{errorMessage}</p>
         )}
       </form>
-    </section>
+    </HudPanel>
   );
 }

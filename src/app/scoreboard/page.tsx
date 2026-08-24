@@ -1,3 +1,4 @@
+import { CommandShell } from "@/components/layout/CommandShell";
 import { ScoreboardWorkspace } from "@/components/scoreboard/ScoreboardWorkspace";
 
 export default async function ScoreboardPage({
@@ -8,10 +9,8 @@ export default async function ScoreboardPage({
   const params = await searchParams;
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-12 text-white">
-      <main className="mx-auto w-full max-w-5xl">
-        <ScoreboardWorkspace gameId={params.gameId} />
-      </main>
-    </div>
+    <CommandShell variant="scoreboard" showSonar={false}>
+      <ScoreboardWorkspace gameId={params.gameId} />
+    </CommandShell>
   );
 }

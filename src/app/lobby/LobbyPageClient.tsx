@@ -52,6 +52,7 @@ import {
   type MatchTeamDocument,
   type MatchTeamId,
 } from "@/lib/matches/types";
+import { CommandShell } from "@/components/layout/CommandShell";
 import { ActiveLobbyPanel } from "./components/ActiveLobbyPanel";
 import { JoinAndCreateColumn } from "./components/JoinAndCreateColumn";
 import { ProfileFormCard } from "./components/ProfileFormCard";
@@ -838,6 +839,7 @@ export function LobbyPageClient() {
       await navigator.clipboard?.writeText(activeMatch.matchCode);
       setLobbyActionMessage("Match code copied.");
       setLobbyActionError(null);
+      pushToast("Copied!", "success");
     } catch {
       setLobbyActionError("Unable to copy match code.");
     }
@@ -852,6 +854,7 @@ export function LobbyPageClient() {
       await navigator.clipboard?.writeText(team.inviteCode);
       setLobbyActionMessage("Crew invite copied.");
       setLobbyActionError(null);
+      pushToast("Copied!", "success");
     } catch {
       setLobbyActionError("Unable to copy crew invite.");
     }
@@ -937,72 +940,72 @@ export function LobbyPageClient() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-10">
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-10">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-semibold text-white">Lobby</h1>
-          <p className="text-sm text-white/80">
-            Host shares a match code. The peer joins as Beta captain with no
-            approval. In multiplayer, each captain recruits crew with their own
-            invite.
-          </p>
-        </header>
-        <section className="grid gap-6 lg:grid-cols-2">
-          <ActiveLobbyPanel
-            activeMatch={activeMatch}
-            alphaTeam={alphaTeam}
-            betaTeam={betaTeam}
-            connectedUid={connectedUid}
-            myTeamId={myTeamId}
-            isAlphaCaptain={isAlphaCaptain}
-            isTeamCaptain={isTeamCaptain}
-            captainJoinRequests={captainJoinRequests}
-            lobbyActionMessage={lobbyActionMessage}
-            lobbyActionError={lobbyActionError}
-            onCopyMatchCode={handleCopyMatchCode}
-            onCopyCrewInvite={handleCopyCrewInvite}
-            onApproveJoinRequest={handleApproveJoinRequest}
-            onRejectJoinRequest={handleRejectJoinRequest}
-            onToggleReady={handleToggleReady}
-            onStartPlacement={handleStartPlacement}
-            onToggleTeamLock={handleToggleTeamLock}
-            onDisbandMatch={handleDisbandMatch}
-            canTakeCommand={canTakeCommand}
-            onTakeCommand={handleTakeCommand}
-          />
-
-          <JoinAndCreateColumn
-            mode={mode}
-            onModeChange={handleModeChange}
-            createMatchState={createMatchState}
-            createMatchError={createMatchError}
-            canCreateMatch={canCreateMatch}
-            onCreateMatch={handleCreateMatch}
-            joinCodeInput={joinCodeInput}
-            onJoinCodeChange={setJoinCodeInput}
-            joinFlowState={joinFlowState}
-            joinFlowMessage={joinFlowMessage}
-            joinFlowError={joinFlowError}
-            canJoinMatch={canJoinMatch}
-            onJoinMatch={handleJoinMatch}
-            pendingJoinRequest={pendingJoinRequest}
-            onCancelJoinRequest={handleCancelJoinRequest}
-          />
-        </section>
-
-        <ProfileFormCard
-          uid={connectedUid}
-          nickname={nicknameInput}
-          statusMessage={statusInput}
-          onNicknameChange={setNicknameInput}
-          onStatusChange={setStatusInput}
-          onSubmit={handleProfileSave}
-          canSubmit={canSubmitProfile}
-          saveState={saveState}
-          lastSavedAt={lastSavedAt}
-          errorMessage={derivedProfileError}
+    <CommandShell variant="lobby">
+      <header className="space-y-2">
+        <h1 className="text-3xl font-semibold uppercase tracking-[0.04em] text-white">
+          Lobby
+        </h1>
+        <p className="text-sm text-white/80">
+          Host shares a match code. The peer joins as Beta captain with no
+          approval. In multiplayer, each captain recruits crew with their own
+          invite.
+        </p>
+      </header>
+      <section className="grid gap-6 lg:grid-cols-2">
+        <ActiveLobbyPanel
+          activeMatch={activeMatch}
+          alphaTeam={alphaTeam}
+          betaTeam={betaTeam}
+          connectedUid={connectedUid}
+          myTeamId={myTeamId}
+          isAlphaCaptain={isAlphaCaptain}
+          isTeamCaptain={isTeamCaptain}
+          captainJoinRequests={captainJoinRequests}
+          lobbyActionMessage={lobbyActionMessage}
+          lobbyActionError={lobbyActionError}
+          onCopyMatchCode={handleCopyMatchCode}
+          onCopyCrewInvite={handleCopyCrewInvite}
+          onApproveJoinRequest={handleApproveJoinRequest}
+          onRejectJoinRequest={handleRejectJoinRequest}
+          onToggleReady={handleToggleReady}
+          onStartPlacement={handleStartPlacement}
+          onToggleTeamLock={handleToggleTeamLock}
+          onDisbandMatch={handleDisbandMatch}
+          canTakeCommand={canTakeCommand}
+          onTakeCommand={handleTakeCommand}
         />
-      </main>
-    </div>
+
+        <JoinAndCreateColumn
+          mode={mode}
+          onModeChange={handleModeChange}
+          createMatchState={createMatchState}
+          createMatchError={createMatchError}
+          canCreateMatch={canCreateMatch}
+          onCreateMatch={handleCreateMatch}
+          joinCodeInput={joinCodeInput}
+          onJoinCodeChange={setJoinCodeInput}
+          joinFlowState={joinFlowState}
+          joinFlowMessage={joinFlowMessage}
+          joinFlowError={joinFlowError}
+          canJoinMatch={canJoinMatch}
+          onJoinMatch={handleJoinMatch}
+          pendingJoinRequest={pendingJoinRequest}
+          onCancelJoinRequest={handleCancelJoinRequest}
+        />
+      </section>
+
+      <ProfileFormCard
+        uid={connectedUid}
+        nickname={nicknameInput}
+        statusMessage={statusInput}
+        onNicknameChange={setNicknameInput}
+        onStatusChange={setStatusInput}
+        onSubmit={handleProfileSave}
+        canSubmit={canSubmitProfile}
+        saveState={saveState}
+        lastSavedAt={lastSavedAt}
+        errorMessage={derivedProfileError}
+      />
+    </CommandShell>
   );
 }

@@ -7,6 +7,8 @@ import {
   useMemo,
   useState,
 } from "react";
+import { HudButton } from "@/components/ui/HudButton";
+import { HudPanel } from "@/components/ui/HudPanel";
 
 export type ToastTone = "info" | "success" | "error";
 
@@ -44,7 +46,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((current) => [...current, { id, message, tone }]);
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
-    }, 4000);
+    }, 4500);
   }, []);
 
   const confirmAction = useCallback(
@@ -64,64 +66,76 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-80 flex-col gap-2"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--nav-offset-bottom)+1rem)] z-50 flex justify-center px-4 md:bottom-8"
         data-testid="toast-stack"
       >
-        {toasts.map((toast) => (
-          <p
-            key={toast.id}
-            data-testid="app-toast"
-            className={[
-              "pointer-events-auto rounded-2xl border px-4 py-3 text-sm font-semibold shadow-lg",
-              toast.tone === "error"
-                ? "border-red-400/40 bg-[#2a1010] text-red-100"
-                : toast.tone === "success"
-                  ? "border-emerald-400/40 bg-[#102418] text-emerald-100"
-                  : "border-white/15 bg-[#0b1220] text-white",
-            ].join(" ")}
-          >
-            {toast.message}
-          </p>
-        ))}
+        <div className="flex w-full max-w-md flex-col gap-2.5">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              data-testid="app-toast"
+              className={[
+                "pointer-events-auto flex items-center gap-3 rounded-[var(--radius-hud)] border px-4 py-3.5 text-sm font-semibold shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 duration-200",
+                toast.tone === "error"
+                  ? "border-rose-500/50 bg-rose-950/90 text-rose-100 shadow-[0_0_20px_rgba(255,46,99,0.3)]"
+                  : toast.tone === "success"
+                    ? "border-emerald-500/50 bg-emerald-950/90 text-emerald-100 shadow-[0_0_20px_rgba(0,245,160,0.3)]"
+                    : "border-cyan-500/40 bg-[#060f1e]/95 text-cyan-100 shadow-[0_0_20px_rgba(0,242,254,0.25)]",
+              ].join(" ")}
+            >
+              <span className="text-base">
+                {toast.tone === "error" ? "⚠️" : toast.tone === "success" ? "✓" : "📡"}
+              </span>
+              <p className="flex-1 font-mono text-xs leading-relaxed">{toast.message}</p>
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* Confirmation Modal */}
       {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md animate-in fade-in duration-150">
+          <HudPanel
+            corners
             role="dialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
-            className="w-full max-w-md space-y-4 rounded-3xl border border-white/10 bg-[#0b1220] p-6 text-white"
+            className="w-full max-w-md space-y-4 p-7 text-white"
             data-testid="confirm-dialog"
           >
-            <h2 id="confirm-title" className="text-xl font-semibold">
+            <div className="flex items-center gap-2 text-rose-400">
+              <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+              <p className="text-xs uppercase tracking-[0.3em] font-mono">
+                TACTICAL CONFIRMATION REQUIRED
+              </p>
+            </div>
+            <h2 id="confirm-title" className="text-2xl font-black uppercase tracking-[0.04em] text-white">
               {confirm.title}
             </h2>
-            <p className="text-sm text-white/70">{confirm.message}</p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
+            <p className="text-sm text-white/70 leading-relaxed">{confirm.message}</p>
+            <div className="flex justify-end gap-3 pt-3">
+              <HudButton
                 data-testid="confirm-cancel"
-                className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold"
+                variant="ghost"
                 onClick={() => {
                   confirm.resolve(false);
                   setConfirm(null);
                 }}
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </HudButton>
+              <HudButton
                 data-testid="confirm-accept"
-                className="rounded-full bg-red-500/80 px-4 py-2 text-sm font-semibold"
+                variant="danger"
                 onClick={() => {
                   confirm.resolve(true);
                   setConfirm(null);
                 }}
               >
                 {confirm.confirmLabel ?? "Confirm"}
-              </button>
+              </HudButton>
             </div>
-          </div>
+          </HudPanel>
         </div>
       )}
     </ToastContext.Provider>

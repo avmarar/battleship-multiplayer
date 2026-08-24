@@ -5,7 +5,7 @@ export default function LobbyPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-linear-to-b from-[#030614] via-[#060b1f] to-[#010103] px-4 py-10 text-white">
+        <div className="flex min-h-screen items-center justify-center bg-[#121212] px-4 py-10 text-white">
           Loading lobby…
         </div>
       }

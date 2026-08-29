@@ -22,7 +22,7 @@ export function CommandShell({
       className={`relative min-h-screen overflow-hidden bg-[#050b14] text-white selection:bg-cyan-500/30 selection:text-cyan-100 ${className}`}
     >
       <Atmosphere variant={variant} showSonar={showSonar} />
-      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 md:py-10">
+      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 md:py-10">
         {children}
       </div>
     </div>

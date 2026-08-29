@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import Link from "next/link";
 import { doc, onSnapshot } from "firebase/firestore";
 import { BattleGrid, type CellMark } from "@/components/grid/BattleGrid";
 import { MatchSummaryCard } from "@/components/scoreboard/MatchSummaryCard";
@@ -45,6 +47,12 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
   const [firing, setFiring] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [showResultModal, setShowResultModal] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const uid = auth.uid;
   const db = auth.db;
@@ -65,6 +73,18 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
       }
     }
   }, [gameId]);
+
+  // Handle Escape key to dismiss result overlay popup
+  useEffect(() => {
+    if (!ended || !showResultModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowResultModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [ended, showResultModal]);
 
   useEffect(() => {
     if (!db || !gameId || !uid) {
@@ -295,7 +315,37 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
         </div>
       </header>
 
-      {summary && <MatchSummaryCard summary={summary} />}
+      {/* When match has ended and modal was minimized, show top status banner */}
+      {ended && summary && !showResultModal && (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-hud)] border border-cyan-400/40 bg-cyan-950/60 p-4 shadow-[0_0_20px_rgba(0,242,254,0.25)] animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{summary.didWin ? "🏆" : "💥"}</span>
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest text-cyan-300 font-bold">
+                ENGAGEMENT CONCLUDED · {summary.didWin ? "VICTORY" : "DEFEAT"}
+              </p>
+              <p className="text-xs text-white/70">
+                Shots: {summary.shotsFired} · Sunk: {summary.shipsSunk} · Lost: {summary.shipsLost}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <HudButton
+              variant="primary"
+              className="text-xs py-2 px-4 font-mono"
+              onClick={() => setShowResultModal(true)}
+            >
+              📊 View Full Summary Popup
+            </HudButton>
+            <Link
+              href="/placement?quickPlay=1"
+              className="inline-flex min-h-[38px] items-center justify-center rounded-[var(--radius-hud)] bg-gradient-to-r from-[#00CED1] to-[#00F2FE] px-4 py-2 text-xs font-black uppercase tracking-wider text-[#041218] shadow-md transition hover:brightness-110"
+            >
+              ⚡ Instant Quick Play
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Disconnect Skip Banner */}
       {!ended && !isMyTurn && shooter && (
@@ -420,6 +470,30 @@ export function BattleWorkspace({ gameId }: BattleWorkspaceProps) {
         <div className="rounded-[var(--radius-hud)] border border-rose-500/40 bg-rose-950/40 p-4 text-sm font-mono text-rose-300">
           ⚠️ ERROR: {errorMessage}
         </div>
+      )}
+
+      {/* Engagement Result Overlay Popup (Blocking further cell selection) */}
+      {ended && summary && showResultModal && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-in fade-in duration-300"
+          data-testid="battle-ended-overlay"
+          onClick={() => setShowResultModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Engagement Result"
+            className="w-full max-w-2xl animate-in zoom-in-95 duration-300 shadow-[0_25px_80px_rgba(0,0,0,0.95),0_0_50px_rgba(0,242,254,0.25)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <MatchSummaryCard
+              summary={summary}
+              showLeaderboardLink={true}
+              onClose={() => setShowResultModal(false)}
+            />
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

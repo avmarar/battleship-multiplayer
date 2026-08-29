@@ -4,7 +4,7 @@ This repository hosts the Sprint 1 proof-of-concept for the Battleship Multiplay
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24+ (CI uses the version in `.nvmrc`)
 - npm (bundled with Node)
 - Firebase project configured for Web (Firestore + Anonymous Auth)
 
@@ -29,7 +29,7 @@ This repository hosts the Sprint 1 proof-of-concept for the Battleship Multiplay
    npm run dev
    ```
 
-4. Visit [http://localhost:3000](http://localhost:3000) to interact with the Sprint 1 dashboard. Once authentication succeeds you can:
+4. Visit [http://localhost:3000](http://localhost:3000) to interact with the hub. The lobby workspace now lives at `/lobby`, with additional stubs at `/placement`, `/game`, and `/scoreboard`. Once authentication succeeds you can:
 
    - See your anonymous UID and document path.
    - Edit the nickname/status form to write to `/artifacts/{namespace}/users/{uid}/data/profile`.
@@ -39,18 +39,79 @@ This repository hosts the Sprint 1 proof-of-concept for the Battleship Multiplay
 
 | Command        | Description                                |
 | :------------- | :----------------------------------------- |
-| `npm run dev`  | Start the Next.js dev server               |
+| `npm run dev`  | Start Firebase emulators and the Next.js dev server |
 | `npm run lint` | Run ESLint across the project              |
+| `npm run typecheck` | TypeScript `--noEmit` check |
+| `npm run test:unit` | Auth and placement unit tests (Vitest) |
+| `npm run test:firebase` | Security rules plus matchmaking/lock emulator tests |
+| `npm run test:rules` | Launch the Firestore emulator suite and run the security rule tests |
+| `npm run test:e2e` | Playwright smoke: auth/profile, lobby join, Quick Play lock, account + hub |
+| `npm run test:e2e:install` | Download the Chromium browser used by Playwright |
+| `npm run test:load-smoke` | Soft NFR-LOAD: write 50 presence docs to the Firestore emulator |
 | `npm run build`/`start` | Production build & start commands |
 
 ## Firebase Emulators (Optional)
 
 Set `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true` in `.env.local` if you want the client to connect to local emulators (`auth:9099`, `firestore:8080`).
 
-## Next Steps
+## Sprint 2 Lobby Flow
 
-- Complete CI/CD wiring (end of Sprint 1\).
-- Extend the authenticated PoC into the lobby, placement, and battle sprints documented in `/docs`.
+Sprint 2 layers lobby creation/join flows on top of the Sprint 1 profile PoC. The full experience resides on `/lobby`.
+
+1. Sign in anonymously (handled automatically on page load) and configure your nickname in the profile form.
+2. Use the **Create a new lobby** card to generate a lobby document. The UI surfaces the invite code, members list, and pending join requests in real time.
+3. Teammates submit the invite code through the **Join by Code** form. Each request is persisted under `lobbies/{lobbyId}/joinRequests/{uid}` and shows up in the captain dashboard for approval.
+4. Captains approve or reject pending join requests from the Active Lobby panel. Approvals add the user to `memberIds`/`members`, enabling instant roster updates for everyone in that lobby.
+5. Run `npm run test:rules` before committing rule changes to verify the Firestore security posture with the emulator suite.
+
+## QA
+
+The suite covers the leftover Sprint 1–3 QA stories:
+
+- **AUTH-1.3 / DP-2.3 / QA-1:** anonymous UID, profile write, live snapshot after reload
+- **QA-1.2:** two browser contexts create a lobby, join by code, and approve
+- **MM-1.3 / QA-3.2:** emulator tests that two Quick Play clients share one game and simultaneous locks both persist
+- **QA-3.1:** two clients Quick Play → place fleets → lock → waiting banner
+- **DP-3.3:** GitHub Actions runs `npm run test:firebase` on pull requests
+
+First-time E2E setup:
+
+```bash
+npm run test:e2e:install
+```
+
+Husky runs `lint-staged` (ESLint on staged JS/TS) and `tsc --noEmit` before each commit. `npm install` installs the hook via the `prepare` script.
+
+If `npm run dev` is already running (emulators on 8080/9099, Next on 3000), Playwright reuses those processes. Otherwise it starts them. Tests reset emulator data between cases, so do not run them against a session you care about keeping.
+
+Against an already-running emulator:
+
+```bash
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:integration
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:rules:run
+```
+
+## Persistent accounts
+
+The app still signs in anonymously on launch so Quick Play and e2e keep working. Use **Guest** in the nav to save an email/password on that same UID (`linkWithCredential`) or sign in to an existing account. Sign out returns you to a new guest session.
+
+## Guest session cleanup (RES-2)
+
+`sweepStaleGuestSessions` deletes stale guest `profile`, `presence`, and leftover `leaderboard` rows. Registered accounts are left alone. W/L is only written when every player in the match is registered. Run the sweeper from an admin/emulator context (security rules only allow a user to delete their own presence). Production schedule still needs Cloud Functions on Blaze.
+
+## Soft load smoke (NFR-LOAD)
+
+With emulators running:
+
+```bash
+npm run test:load-smoke
+```
+
+This writes 50 presence documents. It is a sanity check, not a full performance lab. CI also runs a 50-session emulator case inside `npm run test:firebase`.
+
+## Staging CI (INF-1.4)
+
+Pushes and PRs to `develop` run `.github/workflows/staging.yml` (`lint`, `typecheck`, `build`). If `FIREBASE_TOKEN` is set on the repo, the workflow also deploys Firestore rules. Hosting/Next export is not required.
 
 ## Git Branching Strategy
 

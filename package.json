@@ -2,13 +2,27 @@
   "name": "battleship",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev": "npm-run-all --parallel emulators dev:next",
     "dev:next": "next dev",
-    "emulators": "firebase emulators:start --only firestore,auth --project battleship-multiplayer",
+    "emulators": "firebase emulators:start --only firestore,auth --project battleship-multiplayer-demo",
+    "test": "npm run test:unit && npm run test:firebase",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/emulator",
+    "test:rules:run": "node tests/firestore/rules.test.js",
+    "test:rules": "npx firebase emulators:exec --project battleship-multiplayer-demo --only firestore \"npm run test:rules:run\"",
+    "test:firebase": "npx firebase emulators:exec --project battleship-multiplayer-demo --only firestore \"npm run test:rules:run && npm run test:integration\"",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
+    "test:load-smoke": "node scripts/load-smoke.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
   },
   "dependencies": {
     "firebase": "^12.6.0",
@@ -17,14 +31,31 @@
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
+    "firebase-tools": "^15.28.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
     "npm-run-all": "^4.1.5",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs}": "eslint --max-warnings=0"
+  },
+  "overrides": {
+    "@google-cloud/pubsub": {
+      "@opentelemetry/core": "2.8.0"
+    },
+    "gaxios": {
+      "uuid": "11.1.1"
+    }
   }
 }

@@ -23,7 +23,7 @@ export default defineConfig({
     {
       command:
         "npx firebase emulators:start --only firestore,auth --project battleship-multiplayer-demo",
-      url: "http://127.0.0.1:8080",
+      url: "http://127.0.0.1:9099",
       reuseExistingServer: true,
       timeout: 120_000,
     },

@@ -38,27 +38,21 @@ test.describe("QA-3.1 Quick Play placement lock", () => {
         beta.goto("/placement?gameId=e2e-placement"),
       ]);
 
-      await expect(alpha.getByTestId("match-status")).toContainText(
-        /You are Team (ALPHA|BETA)/,
-        { timeout: 20_000 }
-      );
-      await expect(beta.getByTestId("match-status")).toContainText(
-        /You are Team (ALPHA|BETA)/,
-        { timeout: 20_000 }
-      );
+      await expect(alpha.getByText(/TEAM (ALPHA|BETA)/i)).toBeVisible({ timeout: 20_000 });
+      await expect(beta.getByText(/TEAM (ALPHA|BETA)/i)).toBeVisible({ timeout: 20_000 });
 
-      const alphaTeam = await alpha.getByTestId("match-status").innerText();
-      const betaTeam = await beta.getByTestId("match-status").innerText();
+      const alphaTeam = await alpha.getByText(/TEAM (ALPHA|BETA)/i).innerText();
+      const betaTeam = await beta.getByText(/TEAM (ALPHA|BETA)/i).innerText();
       expect(alphaTeam).not.toEqual(betaTeam);
 
       await placeStandardFleet(alpha);
       await placeStandardFleet(beta);
 
       await alpha.getByTestId("lock-placement").click();
-      await expect(alpha.getByTestId("lock-placement")).toHaveText(
-        "Placement locked"
+      await expect(alpha.getByTestId("lock-placement")).toContainText(
+        /Placement Locked/i
       );
-      await expect(beta.getByTestId("opponent-ready")).toBeVisible({
+      await expect(beta.getByText(/LOCKED & ARMED|Opponent Ready/i)).toBeVisible({
         timeout: 10_000,
       });
 

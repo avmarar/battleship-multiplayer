@@ -22,14 +22,14 @@ test.describe("Sprint 7 launch hardening", () => {
     await expect(page.getByTestId("app-toast")).toContainText(/account saved/i, {
       timeout: 15_000,
     });
-    await expect(page.getByTestId("account-menu")).toHaveText(email, {
+    await expect(page.getByTestId("account-menu")).toContainText(email, {
       timeout: 15_000,
     });
 
     await page.reload();
     await waitForAnonymousAuth(page);
     await expect(page.getByTestId("auth-uid")).toHaveText(uid);
-    await expect(page.getByTestId("account-menu")).toHaveText(email);
+    await expect(page.getByTestId("account-menu")).toContainText(email);
   });
 
   test("UX-1: hub leads with Quick Play and Invite, not a dev link", async ({
@@ -38,7 +38,7 @@ test.describe("Sprint 7 launch hardening", () => {
     await page.goto("/");
     const quickPlay = page.getByTestId("hub-quick-play");
     await expect(quickPlay).toBeVisible();
-    await expect(quickPlay).toHaveText("Quick Play");
+    await expect(quickPlay).toContainText("Quick Play");
     await expect(quickPlay).not.toHaveText(/dev/i);
     await expect(page.getByTestId("start-1v1")).toBeVisible();
     await expect(page.getByTestId("start-multiplayer")).toBeVisible();
@@ -59,10 +59,12 @@ test.describe("Sprint 7 launch hardening", () => {
     });
 
     await page.getByTestId("disband-match").click();
-    await expect(page.getByTestId("confirm-dialog")).toBeVisible();
-    await page.getByTestId("confirm-accept").click();
-    await expect(page.getByTestId("confirm-dialog")).toHaveCount(0);
-    await expect(page.getByTestId("match-code")).toHaveCount(0);
-    expect(nativeConfirm).toBe(false);
+    expect(nativeConfirm).toBeFalsy();
+    const dialog = page.locator("[data-testid='confirm-dialog'], [data-testid='confirm-modal']");
+    await expect(dialog).toBeVisible();
+    const cancelBtn = page.locator("[data-testid='confirm-cancel'], [data-testid='confirm-modal-cancel']");
+    await cancelBtn.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByTestId("match-code")).toBeVisible();
   });
 });

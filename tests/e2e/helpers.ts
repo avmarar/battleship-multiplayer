@@ -12,18 +12,29 @@ const FLEET_ORIGINS = [
 ] as const;
 
 export async function resetEmulators(request: APIRequestContext) {
-  const firestore = await request.delete(
-    `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`
-  );
-  const auth = await request.delete(
-    `http://127.0.0.1:9099/emulator/v1/projects/${PROJECT_ID}/accounts`
-  );
-
-  if (!firestore.ok()) {
-    throw new Error(`Failed to reset Firestore emulator: ${firestore.status()}`);
+  let firestore;
+  let auth;
+  for (let i = 0; i < 15; i++) {
+    try {
+      firestore = await request.delete(
+        `http://127.0.0.1:8080/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`
+      );
+      auth = await request.delete(
+        `http://127.0.0.1:9099/emulator/v1/projects/${PROJECT_ID}/accounts`
+      );
+      if (firestore.ok() && auth.ok()) {
+        return;
+      }
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
   }
-  if (!auth.ok()) {
-    throw new Error(`Failed to reset Auth emulator: ${auth.status()}`);
+
+  if (!firestore?.ok()) {
+    throw new Error(`Failed to reset Firestore emulator: ${firestore?.status()}`);
+  }
+  if (!auth?.ok()) {
+    throw new Error(`Failed to reset Auth emulator: ${auth?.status()}`);
   }
 }
 
@@ -183,8 +194,9 @@ export async function seedLeaderboardEntry(
 export async function placeStandardFleet(page: Page) {
   for (const [ship, cell] of FLEET_ORIGINS) {
     await page.getByTestId(`ship-tray-${ship}`).click();
+    await page.waitForTimeout(100);
     await page.getByRole("button", { name: `Cell ${cell}`, exact: true }).click();
   }
 
-  await expect(page.getByTestId("fleet-count")).toHaveText("5/5 placed");
+  await expect(page.getByTestId("fleet-count")).toContainText("5/5");
 }

@@ -1,120 +1,248 @@
-## Battleship Multiplayer · Sprint 1 Playground
+# 🚢 Battleship Multiplayer
 
-This repository hosts the Sprint 1 proof-of-concept for the Battleship Multiplayer project. The goal of this iteration is to prove out Firebase integration (anonymous authentication + real-time Firestore reads/writes) while delivering a static tactical home screen inspired by the UX blueprint.
+A modern, real-time multiplayer tactical Battleship web application built with **Next.js 16 (App Router)**, **React 19**, **TypeScript**, **Tailwind CSS v4**, and **Firebase v12 (Firestore + Authentication)**.
 
-## Prerequisites
+---
 
-- Node.js 24+ (CI uses the version in `.nvmrc`)
-- npm (bundled with Node)
-- Firebase project configured for Web (Firestore + Anonymous Auth)
+## 🌟 Key Features
 
-## Setup
+### 🎮 Tactical Hub & Match Modes (`/`)
+- **Quick Play Matchmaking**: Instant 1v1 auto-pairing via atomic Firestore transactions (`matchmakingSlots/open`).
+- **1v1 Invite Matches**: Private host vs. challenger match creation and joining via unique match codes.
+- **Multiplayer Crew Matches**: Team-based matches with dual-team lobbies (Alpha & Beta teams) and team-scoped crew invite codes.
+- **Active Match Resume**: Automatic heartbeat presence monitoring with an active match resume banner on the hub.
 
-1. Copy the example environment file and fill in your Firebase values:
+### 👥 Tactical Lobbies & Captain Dashboard (`/lobby`)
+- **Dual-Team Captain Architecture**: Match creator commands Team Alpha; the first opposing joiner commands Team Beta.
+- **Crew Request Queue**: Captains review, approve, or reject incoming crew join requests in real time.
+- **Ready State & Team Lock**: Dynamic ready indicators across all roster members; locks prevent late joins once teams prepare.
+- **Synchronized Game Launch**: Captain triggers game start, automatically transitioning all team members to placement.
 
-   ```bash
-   cp .env.local.example .env.local
-   # populate each NEXT_PUBLIC_FIREBASE_* field with your project values
-   ```
+### ⚓ Interactive Fleet Placement (`/placement`)
+- **10×10 Tactical Ocean Grid**: Smooth drag-and-drop, touch support, and keyboard rotation (`R` / 90° snap).
+- **Standard 5-Ship Fleet**: Carrier (5), Battleship (4), Cruiser (3), Submarine (3), Destroyer (2).
+- **Collision & Boundary Validation**: Visual feedback preventing out-of-bounds or overlapping placements.
+- **Real-Time Collaborative Drafting**: Team members can adjust and preview fleet formations collaboratively.
+- **Captain-Only Atomic Lock**: Placement lock is validated and committed atomically via Firestore transactions, with real-time opponent status tracking.
 
-2. Install dependencies:
+### 🎯 Turn-Based Battle Combat Engine (`/game`)
+- **Sequential Team Attack Engine**: Fair round-robin turn order across team rosters.
+- **Fog of War Radar**: Interactive opponent targeting grid with real-time shot firing transactions.
+- **Live Damage & Sunk Alerts**: Immediate hit/miss radar markers, ship damage tracking, and sunk ship broadcast alerts.
+- **AFK & Disconnect Resilience**: Automatic 30-second turn skip for disconnected players and 60-second captain handover to the longest-tenured teammate.
+- **Victory & Defeat Resolution**: Game ends automatically when all ships of an opposing fleet are sunk.
 
-   ```bash
-   npm install
-   ```
+### 🏆 Post-Match Analysis & Leaderboard (`/scoreboard`)
+- **Post-Match Summary**: Detailed end-of-battle performance metrics (shots fired, hit accuracy, ships sunk, victor status).
+- **Authenticated Global Leaderboard**: Ranked stats tracking (Win Rate %, Total Wins, Matches Played) with sorting and filtering for registered commanders.
 
-3. Start the local dev server:
+### 🔐 Authentication & Session Management
+- **Instant Guest Play**: Automatic anonymous guest sign-in (`Guest-XXXX`) on initial launch.
+- **Account Upgrades**: Link anonymous credentials to email/password in place via the Guest dropdown without losing active session state.
+- **Stale Session Cleanup**: Automated sweeper (`sweepStaleGuestSessions`) for purging expired guest presence and profile records.
 
-   ```bash
-   npm run dev
-   ```
+---
 
-4. Visit [http://localhost:3000](http://localhost:3000) to interact with the hub. The lobby workspace now lives at `/lobby`, with additional stubs at `/placement`, `/game`, and `/scoreboard`. Once authentication succeeds you can:
+## 🛠️ Tech Stack
 
-   - See your anonymous UID and document path.
-   - Edit the nickname/status form to write to `/artifacts/{namespace}/users/{uid}/data/profile`.
-   - Watch the Firestore snapshot section update live.
+| Layer | Technology |
+| :--- | :--- |
+| **Framework** | [Next.js 16 (App Router)](https://nextjs.org/) |
+| **UI & State** | [React 19](https://react.dev/), [TypeScript 5](https://www.typescriptlang.org/) |
+| **Styling** | [Tailwind CSS v4](https://tailwindcss.com/), PostCSS |
+| **Database & Auth** | [Firebase v12](https://firebase.google.com/) (Cloud Firestore & Firebase Authentication) |
+| **Unit & Integration Testing** | [Vitest](https://vitest.dev/), [@firebase/rules-unit-testing](https://www.npmjs.com/package/@firebase/rules-unit-testing) |
+| **End-to-End Testing** | [Playwright](https://playwright.dev/) |
+| **Tooling & CI** | ESLint 9, Husky, lint-staged, GitHub Actions |
 
-## Scripts
+---
 
-| Command        | Description                                |
-| :------------- | :----------------------------------------- |
-| `npm run dev`  | Start Firebase emulators and the Next.js dev server |
-| `npm run lint` | Run ESLint across the project              |
-| `npm run typecheck` | TypeScript `--noEmit` check |
-| `npm run test:unit` | Auth and placement unit tests (Vitest) |
-| `npm run test:firebase` | Security rules plus matchmaking/lock emulator tests |
-| `npm run test:rules` | Launch the Firestore emulator suite and run the security rule tests |
-| `npm run test:e2e` | Playwright smoke: auth/profile, lobby join, Quick Play lock, account + hub |
-| `npm run test:e2e:install` | Download the Chromium browser used by Playwright |
-| `npm run test:load-smoke` | Soft NFR-LOAD: write 50 presence docs to the Firestore emulator |
-| `npm run build`/`start` | Production build & start commands |
+## 📂 Project Structure
 
-## Firebase Emulators (Optional)
-
-Set `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true` in `.env.local` if you want the client to connect to local emulators (`auth:9099`, `firestore:8080`).
-
-## Sprint 2 Lobby Flow
-
-Sprint 2 layers lobby creation/join flows on top of the Sprint 1 profile PoC. The full experience resides on `/lobby`.
-
-1. Sign in anonymously (handled automatically on page load) and configure your nickname in the profile form.
-2. Use the **Create a new lobby** card to generate a lobby document. The UI surfaces the invite code, members list, and pending join requests in real time.
-3. Teammates submit the invite code through the **Join by Code** form. Each request is persisted under `lobbies/{lobbyId}/joinRequests/{uid}` and shows up in the captain dashboard for approval.
-4. Captains approve or reject pending join requests from the Active Lobby panel. Approvals add the user to `memberIds`/`members`, enabling instant roster updates for everyone in that lobby.
-5. Run `npm run test:rules` before committing rule changes to verify the Firestore security posture with the emulator suite.
-
-## QA
-
-The suite covers the leftover Sprint 1–3 QA stories:
-
-- **AUTH-1.3 / DP-2.3 / QA-1:** anonymous UID, profile write, live snapshot after reload
-- **QA-1.2:** two browser contexts create a lobby, join by code, and approve
-- **MM-1.3 / QA-3.2:** emulator tests that two Quick Play clients share one game and simultaneous locks both persist
-- **QA-3.1:** two clients Quick Play → place fleets → lock → waiting banner
-- **DP-3.3:** GitHub Actions runs `npm run test:firebase` on pull requests
-
-First-time E2E setup:
-
-```bash
-npm run test:e2e:install
+```text
+battleship-multiplayer/
+├── .github/workflows/          # CI pipelines (staging build, rules deploy, QA matrix)
+├── docs/                       # Architecture diagrams, BRD, HLD, and sprint specifications
+├── public/                     # Static assets and icons
+├── scripts/
+│   └── load-smoke.mjs          # Soft NFR load testing script (50 concurrent sessions)
+├── src/
+│   ├── app/                    # Next.js App Router pages
+│   │   ├── page.tsx            # Tactical Hub & Matchmaking
+│   │   ├── lobby/              # Match & Crew Lobby Workspace
+│   │   ├── placement/          # 10×10 Fleet Placement Workspace
+│   │   ├── game/               # Tactical Battle Station & Combat Engine
+│   │   └── scoreboard/         # Post-Match Summary & Global Leaderboard
+│   ├── components/             # Modular UI & Game Components
+│   │   ├── auth/               # Account modal, guest dropdown, login/register forms
+│   │   ├── battle/             # Combat HUD, targeting radar, fleet health, turn timer
+│   │   ├── feedback/           # Toast notifications, confirmation dialogs
+│   │   ├── grid/               # 10×10 BattleGrid coordinate renderer
+│   │   ├── hub/                # Quick Play, 1v1 invite, and crew match cards
+│   │   ├── layout/             # Top navbar, profile status, audio toggles
+│   │   ├── placement/          # Ship tray, drag preview, rotation controls
+│   │   ├── scoreboard/         # Victory breakdown, leaderboard table
+│   │   └── ui/                 # Reusable buttons, badges, modals, cards
+│   └── lib/                    # Core business logic & Firebase services
+│       ├── cleanup/            # Guest session sweeper & data purge
+│       ├── firebase/           # Client SDK initialization & emulator wiring
+│       ├── games/              # Combat transactions, shot resolution, turn order
+│       ├── grid/               # Coordinate helpers, ship specs, placement validation
+│       ├── leaderboard/        # Ranked match stats & leaderboard queries
+│       ├── lobbies/            # Match lobby state, captain mutations, crew invites
+│       ├── matches/            # Match initialization, team roster management
+│       ├── presence/           # Heartbeat listeners & disconnect handling
+│       └── profile/            # User profile data & nickname management
+├── tests/
+│   ├── e2e/                    # Playwright end-to-end browser specs
+│   ├── emulator/               # Vitest integration tests against Firestore emulator
+│   ├── firestore/              # Security rules unit tests (`rules.test.js`)
+│   └── unit/                   # Vitest unit tests for game logic and domain models
+├── firestore.rules             # Granular Firestore security rules
+├── firestore.indexes.json      # Firestore composite indexes
+├── firebase.json               # Firebase emulator & deployment configuration
+└── package.json                # Project dependencies & scripts
 ```
 
-Husky runs `lint-staged` (ESLint on staged JS/TS) and `tsc --noEmit` before each commit. `npm install` installs the hook via the `prepare` script.
+---
 
-If `npm run dev` is already running (emulators on 8080/9099, Next on 3000), Playwright reuses those processes. Otherwise it starts them. Tests reset emulator data between cases, so do not run them against a session you care about keeping.
+## 🚀 Getting Started
 
-Against an already-running emulator:
+### Prerequisites
+
+- **Node.js**: `v24.0.0+` (refer to `.nvmrc`)
+- **npm**: `v10+`
+- **Java JRE**: Required to run the local Firebase emulator suite
+
+### 1. Installation
+
+Clone the repository and install dependencies:
 
 ```bash
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:integration
+git clone https://github.com/avmarar/battleship-multiplayer.git
+cd battleship-multiplayer
+npm install
+```
+
+### 2. Environment Configuration
+
+Copy the example environment configuration file:
+
+```bash
+cp .env.local.example .env.local
+```
+
+For **local development with emulators**, configure `.env.local` as follows:
+
+```dotenv
+# Firebase Configuration (Dummy values are sufficient when using emulators)
+NEXT_PUBLIC_FIREBASE_API_KEY="AIzaSyDemoKey"
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="battleship-multiplayer-demo.firebaseapp.com"
+NEXT_PUBLIC_FIREBASE_PROJECT_ID="battleship-multiplayer-demo"
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="battleship-multiplayer-demo.appspot.com"
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="000000000000"
+NEXT_PUBLIC_FIREBASE_APP_ID="1:000000000000:web:0000000000000000000000"
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID="G-0000000000"
+
+# App-specific Identifiers
+NEXT_PUBLIC_APP_NAMESPACE="dev-squadron"
+NEXT_PUBLIC_FIREBASE_ARTIFACTS_COLLECTION="artifacts"
+
+# Set to true for local emulator development
+NEXT_PUBLIC_USE_FIREBASE_EMULATORS="true"
+```
+
+### 3. Run Development Server
+
+Start both the Firebase emulators (Auth & Firestore) and Next.js concurrently:
+
+```bash
+npm run dev
+```
+
+The application will be accessible at [http://localhost:3000](http://localhost:3000).  
+The Firebase Emulator Suite UI is available at [http://127.0.0.1:4000](http://127.0.0.1:4000) (Auth: `9099`, Firestore: `8080`).
+
+---
+
+## 📜 Available Scripts
+
+| Command | Description |
+| :--- | :--- |
+| `npm run dev` | Starts Firebase emulators and Next.js dev server in parallel |
+| `npm run dev:next` | Starts only the Next.js dev server |
+| `npm run emulators` | Starts the Firebase Firestore & Auth local emulators |
+| `npm run build` | Compiles the production build |
+| `npm run start` | Runs the compiled Next.js production server |
+| `npm run lint` | Runs ESLint across the codebase |
+| `npm run typecheck` | Validates TypeScript types (`tsc --noEmit`) |
+| `npm run test` | Runs the full test suite (unit + emulator integration) |
+| `npm run test:unit` | Runs Vitest unit tests for domain logic and helpers |
+| `npm run test:integration` | Runs Vitest emulator integration tests |
+| `npm run test:rules` | Spins up the Firestore emulator and runs security rules tests |
+| `npm run test:firebase` | Executes security rules and emulator integration suites within an automated emulator instance |
+| `npm run test:e2e` | Runs Playwright end-to-end browser tests |
+| `npm run test:e2e:install` | Downloads the required Chromium browser for Playwright |
+| `npm run test:load-smoke` | Executes the 50-session concurrent presence load test |
+
+---
+
+## 🧪 Testing & Quality Assurance
+
+### Unit Tests
+Unit tests cover ship placement calculations, coordinate translations, team ready states, and captain assignments:
+```bash
+npm run test:unit
+```
+
+### Firestore Security Rules & Integration Tests
+Security rules strictly enforce turn authority, fog of war, placement boundaries, and captain authorizations.
+```bash
+# Automated emulator lifecycle execution
+npm run test:firebase
+
+# Or against an already running emulator
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:rules:run
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:integration
 ```
 
-## Persistent accounts
+### End-to-End (E2E) Testing
+Playwright simulates multi-client gameplay (Quick Play matchmaking, fleet placement, simultaneous locks, battle turns, and scoreboard resolution):
+```bash
+# First time setup
+npm run test:e2e:install
 
-The app still signs in anonymously on launch so Quick Play and e2e keep working. Use **Guest** in the nav to save an email/password on that same UID (`linkWithCredential`) or sign in to an existing account. Sign out returns you to a new guest session.
+# Run tests
+npm run test:e2e
+```
 
-## Guest session cleanup (RES-2)
-
-`sweepStaleGuestSessions` deletes stale guest `profile`, `presence`, and leftover `leaderboard` rows. Registered accounts are left alone. W/L is only written when every player in the match is registered. Run the sweeper from an admin/emulator context (security rules only allow a user to delete their own presence). Production schedule still needs Cloud Functions on Blaze.
-
-## Soft load smoke (NFR-LOAD)
-
-With emulators running:
-
+### Soft Load Smoke Test (NFR-LOAD)
+Verifies that the system can handle 50 concurrent client presence heartbeats and document writes without contention:
 ```bash
 npm run test:load-smoke
 ```
 
-This writes 50 presence documents. It is a sanity check, not a full performance lab. CI also runs a 50-session emulator case inside `npm run test:firebase`.
+---
 
-## Staging CI (INF-1.4)
+## 🔒 Security & Firestore Data Model
 
-Pushes and PRs to `develop` run `.github/workflows/staging.yml` (`lint`, `typecheck`, `build`). If `FIREBASE_TOKEN` is set on the repo, the workflow also deploys Firestore rules. Hosting/Next export is not required.
+- **Match & Lobby Isolation**: Lobbies and matches (`matches/{id}`) maintain team assignments, join requests, and captain IDs with strict member-level write permissions.
+- **Combat Isolation & Fog of War**: Game documents (`games/{id}`) maintain round-robin turn order, active shooter IDs, and hit registries. Fleets are locked into protected subpaths so opponents cannot inspect hidden ship locations prior to sinking.
+- **Turn Authority**: Shots can only be fired during an active player's designated turn against valid un-targeted coordinates.
+- **Ranked Leaderboard Protection**: Leaderboard records (`leaderboard/{uid}`) are written exclusively upon match completion for fully authenticated players.
 
-## Git Branching Strategy
+---
 
-- `master`: Release-quality branch only. Promote from `develop` after QA + deployment sign-off.
-- `develop`: Integration branch for upcoming sprint work. All feature branches merge here via PR.
-- `feature/<ticket-or-topic>`: Short-lived branches for individual tasks. Branch from `develop`, submit PR back to `develop`, then delete after merge.
+## 🌿 Git & Contribution Workflow
+
+- `master`: Production / release-ready branch.
+- `develop`: Main integration branch for sprint features.
+- `feature/*`: Short-lived feature branches created from `develop` and merged back via Pull Requests.
+
+Pre-commit hooks managed by **Husky** automatically run `lint-staged` (ESLint) and `tsc --noEmit` before any commit is accepted.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
